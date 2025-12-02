@@ -9,6 +9,19 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Extensions\DbDataReaderExtensionsTests.fs" />
+    <Compile Include="Extensions\StringExtensionsTests.fs" />
+    <Compile Include="DataTypes\DbDateTimeTests.fs" />
+    <Compile Include="DataTypes\DbMoneyTests.fs" />
+    <Compile Include="DataTypes\DbSmallDateTimeTests.fs" />
+    <Compile Include="DataTypes\DbSmallMoneyTests.fs" />
+    <Compile Include="ContextBasedUserServiceTests.fs" />
+    <Compile Include="DbConnectionInfoTests.fs" />
+    <Compile Include="DbParameterTests.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
