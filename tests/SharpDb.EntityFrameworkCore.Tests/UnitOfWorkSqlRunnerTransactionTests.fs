@@ -35,24 +35,26 @@ module UnitOfWorkSqlRunnerTransactionTests =
 
     [<Fact>]
     let ``EfcSqlRunner SqlExecuteAsync in UoW transaction commits successfully`` () =
-        let ctx, conn = createContextSqlite()
-        try
-            let uow = DummyUnitOfWork(ctx)
-            let name = "SqlRunnerTest"
-            let! result = uow.InTransactionAsync(fun () ->
-                task {
-                    let r2 = uow.Sql.SqlExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({name})""").AsTask() |> Async.AwaitTask
-                    let r3 = uow.Sql.SqlManyAsync<DummyEntity>($"""SELECT * FROM DummyEntity WHERE Name = {name}""", fun r -> new DummyEntity()).AsTask() |> Async.AwaitTask
-                    ignore r2
-                    ignore r3
-                }
-            )
-            Assert.True(result.Result.IsSuccess)
-            Assert.Equal(1, ctx.Set<DummyEntity>().CountAsync(fun e -> e.Name = name).Result)
-        finally
-            ctx.Dispose()
-            conn.Close()
-            conn.Dispose()
+        task {
+            let ctx, conn = createContextSqlite()
+            try
+                let uow = DummyUnitOfWork(ctx)
+                let name = "SqlRunnerTest"
+                let! result = uow.InTransactionAsync(fun () ->
+                    task {
+                        let r2 = uow.Sql.SqlExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({name})""").AsTask() |> Async.AwaitTask
+                        let r3 = uow.Sql.SqlManyAsync<DummyEntity>($"""SELECT * FROM DummyEntity WHERE Name = {name}""", fun r -> new DummyEntity()).AsTask() |> Async.AwaitTask
+                        ignore r2
+                        ignore r3
+                    }
+                )
+                Assert.True(result.IsSuccess)
+                Assert.Equal(1, ctx.Set<DummyEntity>().CountAsync(fun e -> e.Name = name).Result)
+            finally
+                ctx.Dispose()
+                conn.Close()
+                conn.Dispose()
+        }
 
     [<Fact>]
     let ``EfcSqlRunner SqlExecuteAsync in UoW transaction rolls back on exception`` () =

@@ -128,24 +128,24 @@ module UnitOfWorkTests =
 
     [<Fact>]
     let ``InTransactionAsync executes action and returns success`` () : Task =
-        let ctx, conn = createContextSqlite()
-        try
-            let uow = DummyUnitOfWork(ctx)
-            let entity = DummyEntity()
-            entity.Name <- "Test"
-            Assert.False(ctx.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
-            task {
+        task {
+            let ctx, conn = createContextSqlite()
+            try
+                let uow = DummyUnitOfWork(ctx)
+                let entity = DummyEntity()
+                entity.Name <- "Test"
+                Assert.False(ctx.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
                 let! result = uow.InTransactionAsync(fun () -> task {
                     ctx.Add(entity) |> ignore
                     uow.SaveChangesAsync() |> ignore
                 })
                 Assert.True(result.IsSuccess)
                 Assert.True(ctx.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
-            }
-        finally
-            ctx.Dispose()
-            conn.Close()
-            conn.Dispose()
+            finally
+                ctx.Dispose()
+                conn.Close()
+                conn.Dispose()
+        }
 
     [<Fact>]
     let ``InTransaction rolls back on exception`` () =
