@@ -42,8 +42,8 @@ module UnitOfWorkSqlRunnerTransactionTests =
                 let name = "SqlRunnerTest"
                 let! result = uow.InTransactionAsync(fun () ->
                     task {
-                        let r2 = uow.Sql.SqlExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({name})""").AsTask() |> Async.AwaitTask
-                        let r3 = uow.Sql.SqlManyAsync<DummyEntity>($"""SELECT * FROM DummyEntity WHERE Name = {name}""", fun r -> new DummyEntity()).AsTask() |> Async.AwaitTask
+                        let r2 = uow.Sql.ExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({name})""").AsTask() |> Async.AwaitTask
+                        let r3 = uow.Sql.ManyAsync<DummyEntity>($"""SELECT * FROM DummyEntity WHERE Name = {name}""", fun r -> new DummyEntity()).AsTask() |> Async.AwaitTask
                         ignore r2
                         ignore r3
                     }
@@ -63,7 +63,7 @@ module UnitOfWorkSqlRunnerTransactionTests =
             let uow = DummyUnitOfWork(ctx)
             let name = "SqlRunnerRollback"
             let result = uow.InTransaction(fun () ->
-                uow.Sql.SqlExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({name})""").AsTask().Wait()
+                uow.Sql.ExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({name})""").AsTask().Wait()
                 raise (Exception("Rollback"))
             )
             Assert.False(result.IsSuccess)
@@ -82,10 +82,10 @@ module UnitOfWorkSqlRunnerTransactionTests =
             let nameInner = "InnerSql"
             let result =
                 uow.InTransaction(fun () ->
-                    uow.Sql.SqlExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({nameOuter})""").AsTask().Wait()
+                    uow.Sql.ExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({nameOuter})""").AsTask().Wait()
                     let innerResult =
                         uow.InTransaction(fun () ->
-                            uow.Sql.SqlExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({nameInner})""").AsTask().Wait()
+                            uow.Sql.ExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({nameInner})""").AsTask().Wait()
                             raise (Exception("Inner rollback"))
                         )
                     Assert.False(innerResult.IsSuccess)
@@ -109,10 +109,10 @@ module UnitOfWorkSqlRunnerTransactionTests =
             let nameInner = "InnerAllSql"
             let result =
                 uow.InTransaction(fun () ->
-                    uow.Sql.SqlExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({nameOuter})""").AsTask().Wait()
+                    uow.Sql.ExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({nameOuter})""").AsTask().Wait()
                     let _ =
                         uow.InTransaction(fun () ->
-                            uow.Sql.SqlExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({nameInner})""").AsTask().Wait()
+                            uow.Sql.ExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({nameInner})""").AsTask().Wait()
                         )
                     raise (Exception("Outer rollback"))
                 )

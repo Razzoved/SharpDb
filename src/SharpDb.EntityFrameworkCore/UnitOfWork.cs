@@ -16,13 +16,13 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
 {
     private readonly Dictionary<int, object> _loadedRepositories = new(3);
     private readonly object _loadedRepositoriesLock = new();
-    private EfcSqlRunner? _sql;
+    private SqlRunner? _sql;
 
     /// <summary>
     /// This property can be used to execute SQL operations directly
     /// on the underlying database.
     /// </summary>
-    public EfcSqlRunner Sql => _sql ??= new(dbContext.Database);
+    public SqlRunner Sql => _sql ??= new(dbContext.Database);
 
     public void Attach<TEntity>(TEntity entity) where TEntity : class
     {

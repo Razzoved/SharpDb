@@ -4,12 +4,12 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace SharpDb.EntityFrameworkCore;
 
-public sealed class EfcSqlRunner : ISqlRunner
+public sealed class SqlRunner : ISqlRunner
 {
     private readonly DatabaseFacade _db;
     private DbConnectionInfo? _connectionInfo;
 
-    public EfcSqlRunner(DatabaseFacade db)
+    public SqlRunner(DatabaseFacade db)
     {
         ArgumentNullException.ThrowIfNull(db, nameof(db));
         _db = db;
@@ -28,22 +28,22 @@ public sealed class EfcSqlRunner : ISqlRunner
         return _connectionInfo;
     }
 
-    public ValueTask<DbQueryResult<T>> SqlSingleAsync<T>(FormattableString sql, Func<DbDataReader, T> reader)
+    public ValueTask<DbQueryResult<T>> SingleAsync<T>(FormattableString sql, Func<DbDataReader, T> reader)
         => _db.SqlSingleAsync(sql, reader);
 
-    public ValueTask<DbQueryResult<T>> RawSqlSingleAsync<T>(string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    public ValueTask<DbQueryResult<T>> RawSingleAsync<T>(string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
         => _db.RawSqlSingleAsync(sql, reader, parameters);
 
-    public ValueTask<DbQueryResult<T[]>> SqlManyAsync<T>(FormattableString sql, Func<DbDataReader, T> reader)
+    public ValueTask<DbQueryResult<T[]>> ManyAsync<T>(FormattableString sql, Func<DbDataReader, T> reader)
         => _db.SqlManyAsync(sql, reader);
 
-    public ValueTask<DbQueryResult<T[]>> RawSqlManyAsync<T>(string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    public ValueTask<DbQueryResult<T[]>> RawManyAsync<T>(string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
         => _db.RawSqlManyAsync(sql, reader, parameters);
 
-    public ValueTask<DbExecResult> SqlExecuteAsync(FormattableString sql)
+    public ValueTask<DbExecResult> ExecuteAsync(FormattableString sql)
         => _db.SqlExecuteAsync(sql);
 
-    public ValueTask<DbExecResult> RawSqlExecuteAsync(string sql, params DbParameter[] parameters)
+    public ValueTask<DbExecResult> RawExecuteAsync(string sql, params DbParameter[] parameters)
         => _db.RawSqlExecuteAsync(sql, parameters);
 
     public ValueTask<DbQueryResult<T>> StoredProcedureSingleAsync<T>(string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
