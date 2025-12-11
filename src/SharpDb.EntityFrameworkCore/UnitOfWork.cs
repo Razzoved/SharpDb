@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Data.Common;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -73,9 +74,10 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
     /// <inheritdoc/>
     /// <remarks>
     /// Take care when using any non-efc logic, such as adding to lists, since the operations might be
-    /// repeated several times when the transaction is retried. Do not wrap this method in a try-catch
-    /// block, as it handles exceptions internally.
+    /// repeated several times when the transaction is retried. Throws an exception if the call
+    /// is nested inside an active transaction and the exception itself is caused by transient error.
     /// </remarks>
+    /// <exception cref="DbException">When transient error occurs in a nested call</exception>
     public DbTransactionResult InTransaction(Action action)
     {
         if (dbContext.Database.CurrentTransaction is IDbContextTransaction transaction)
@@ -94,6 +96,7 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
                 {
                     transaction.RollbackToSavepoint(savepoint);
                     transactionContext.Rollback();
+                    if (e is DbException { IsTransient: true }) throw;
                     return DbTransactionResult.Failure(new ExceptionDbError(e));
                 }
                 finally
@@ -145,9 +148,10 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
     /// <inheritdoc/>
     /// <remarks>
     /// Take care when using any non-efc logic, such as adding to lists, since the operations might be
-    /// repeated several times when the transaction is retried. Do not wrap this method in a try-catch
-    /// block, as it handles exceptions internally.
+    /// repeated several times when the transaction is retried. Throws an exception if the call
+    /// is nested inside an active transaction and the exception itself is caused by transient error.
     /// </remarks>
+    /// <exception cref="DbException">When transient error occurs in a nested call</exception>
     public async ValueTask<DbTransactionResult> InTransactionAsync(Func<Task> action)
     {
         if (dbContext.Database.CurrentTransaction is IDbContextTransaction transaction)
@@ -162,11 +166,12 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
                     await action();
                     return DbTransactionResult.Success(TransactionContext.AffectedRows);
                 }
-                catch
+                catch (Exception e)
                 {
                     await transaction.RollbackToSavepointAsync(savepoint);
                     transactionContext.Rollback();
-                    throw;
+                    if (e is DbException { IsTransient: true }) throw;
+                    return DbTransactionResult.Failure(new ExceptionDbError(e));
                 }
                 finally
                 {
