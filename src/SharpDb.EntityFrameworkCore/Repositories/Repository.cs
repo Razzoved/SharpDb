@@ -2,6 +2,12 @@
 
 namespace SharpDb.EntityFrameworkCore.Repositories;
 
+/// <summary>
+/// Base implementation of <see cref="IRepository{TEntity}"/> for Entity Framework Core.
+/// Use this as a base class for custom repositories. By default, all operations throw
+/// an exception, so you need to override the methods you want to support.
+/// </summary>
+/// <typeparam name="TEntity">Target entity type</typeparam>
 public abstract class Repository<TEntity> : IRepository<TEntity> where TEntity : class
 {
     private readonly Lazy<DbSet<TEntity>> _set;
