@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Runtime.CompilerServices;
 
 namespace SharpDb.EntityFrameworkCore.Entities;
 
@@ -7,10 +8,8 @@ namespace SharpDb.EntityFrameworkCore.Entities;
 /// </summary>
 public abstract class Entity
 {
-#pragma warning disable CS0067
     public event PropertyChangingEventHandler? PropertyChanging;
     public event PropertyChangedEventHandler? PropertyChanged;
-#pragma warning restore CS0067
 
     protected Entity()
     {
@@ -33,6 +32,23 @@ public abstract class Entity
     /// <param name="sender">Expected to be the entity</param>
     /// <param name="e">Info about property that has been changed</param>
     protected virtual void OnPropertyChanged(object? sender, PropertyChangedEventArgs e) { }
+
+    /// <summary>
+    /// Updates the field and raises PropertyChanging and PropertyChanged events if the value has changed.
+    /// </summary>
+    /// <typeparam name="T">Property type</typeparam>
+    /// <param name="property">Reference to the property</param>
+    /// <param name="value">Value to be set</param>
+    /// <param name="propertyName">Name of the property (if called in set method)</param>
+    protected void SetProperty<T>(ref T property, T value, [CallerMemberName] string? propertyName = null)
+    {
+        if (!EqualityComparer<T>.Default.Equals(property, value))
+        {
+            PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
+            property = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
 }
 
 /// <summary>
