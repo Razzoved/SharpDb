@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>8.0.0-alpha</Version>
+    <Version>8.0.0</Version>
     <Description>Library providing utilities/extensions for Microsoft.EntityFrameworkCore</Description>
     <Authors>Jan Martinek</Authors>
     <Keyword>sharpdb lib database data efc</Keyword>
