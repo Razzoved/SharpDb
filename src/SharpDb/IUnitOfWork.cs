@@ -5,7 +5,7 @@
 /// It is designed to be used in short-lived contexts only, for long-running tasks
 /// manage instantiation and disposal cycles carefully to avoid memory or context leaks.
 /// </summary>
-public interface IUnitOfWork
+public interface IUnitOfWork : IDisposable
 {
     /// <summary>
     /// Adds the entity to change tracking, this has no effect when the entity is already
