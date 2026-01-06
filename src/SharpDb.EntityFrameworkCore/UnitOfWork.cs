@@ -13,35 +13,42 @@ namespace SharpDb.EntityFrameworkCore;
 /// or database commands.
 /// </summary>
 /// <param name="dbContext">Database context to be wrapped</param>
-public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
+public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContextFactory) : IDisposable, IUnitOfWork where TContext : DbContext
 {
+    private readonly TContext _dbContext = dbContextFactory.CreateDbContext();
     private readonly Dictionary<int, object> _loadedRepositories = new(3);
     private readonly object _loadedRepositoriesLock = new();
     private SqlRunner? _sql;
+    private bool _disposed;
+
+    ~UnitOfWork()
+    {
+        Dispose(disposing: false);
+    }
 
     /// <summary>
     /// This property can be used to execute SQL operations directly
     /// on the underlying database.
     /// </summary>
-    public SqlRunner Sql => _sql ??= new(dbContext.Database);
+    public SqlRunner Sql => _sql ??= new(_dbContext.Database);
 
     public void Attach<TEntity>(TEntity entity) where TEntity : class
     {
-        var entry = dbContext.Entry(entity);
+        var entry = _dbContext.Entry(entity);
         if (entry.State == EntityState.Detached)
             entry.State = EntityState.Unchanged;
     }
 
     public void Detach<TEntity>(TEntity entity) where TEntity : class
     {
-        var entry = dbContext.Entry(entity);
+        var entry = _dbContext.Entry(entity);
         if (entry.State != EntityState.Detached)
             entry.State = EntityState.Detached;
     }
 
     public int SaveChanges()
     {
-        int affectedRows = dbContext.SaveChanges();
+        int affectedRows = _dbContext.SaveChanges();
         if (affectedRows > 0 && TransactionContext.Transaction is not null)
         {
             TransactionContext.AddAffectedRows((uint)affectedRows);
@@ -51,7 +58,7 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
 
     public async ValueTask<int> SaveChangesAsync()
     {
-        int affectedRows = await dbContext.SaveChangesAsync();
+        int affectedRows = await _dbContext.SaveChangesAsync();
         if (affectedRows > 0 && TransactionContext.Transaction is not null)
         {
             TransactionContext.AddAffectedRows((uint)affectedRows);
@@ -67,7 +74,7 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
         }
         else
         {
-            dbContext.ChangeTracker.Clear();
+            _dbContext.ChangeTracker.Clear();
         }
     }
 
@@ -80,13 +87,13 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
     /// <exception cref="DbException">When transient error occurs in a nested call</exception>
     public DbTransactionResult InTransaction(Action action)
     {
-        if (dbContext.Database.CurrentTransaction is IDbContextTransaction transaction)
+        if (_dbContext.Database.CurrentTransaction is IDbContextTransaction transaction)
         {
             if (transaction.SupportsSavepoints)
             {
                 string savepoint = Guid.NewGuid().ToString("N");
                 transaction.CreateSavepoint(savepoint);
-                using var transactionContext = new TransactionContext(dbContext);
+                using var transactionContext = new TransactionContext(_dbContext);
                 try
                 {
                     action();
@@ -112,14 +119,14 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
         }
         else
         {
-            var strategy = dbContext.Database.CreateExecutionStrategy();
+            var strategy = _dbContext.Database.CreateExecutionStrategy();
             try
             {
                 uint affectedRows = 0;
                 strategy.Execute(() =>
                 {
-                    using var transaction = dbContext.Database.BeginTransaction();
-                    using var transactionContext = new TransactionContext(dbContext);
+                    using var transaction = _dbContext.Database.BeginTransaction();
+                    using var transactionContext = new TransactionContext(_dbContext);
                     try
                     {
                         action();
@@ -154,13 +161,13 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
     /// <exception cref="DbException">When transient error occurs in a nested call</exception>
     public async ValueTask<DbTransactionResult> InTransactionAsync(Func<Task> action)
     {
-        if (dbContext.Database.CurrentTransaction is IDbContextTransaction transaction)
+        if (_dbContext.Database.CurrentTransaction is IDbContextTransaction transaction)
         {
             if (transaction.SupportsSavepoints)
             {
                 string savepoint = Guid.NewGuid().ToString("N");
                 await transaction.CreateSavepointAsync(savepoint);
-                using var transactionContext = new TransactionContext(dbContext);
+                using var transactionContext = new TransactionContext(_dbContext);
                 try
                 {
                     await action();
@@ -186,14 +193,14 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
         }
         else
         {
-            var strategy = dbContext.Database.CreateExecutionStrategy();
+            var strategy = _dbContext.Database.CreateExecutionStrategy();
             try
             {
                 uint affectedRows = 0;
                 await strategy.ExecuteAsync(async () =>
                 {
-                    using var transaction = dbContext.Database.BeginTransaction();
-                    using var transactionContext = new TransactionContext(dbContext);
+                    using var transaction = _dbContext.Database.BeginTransaction();
+                    using var transactionContext = new TransactionContext(_dbContext);
                     try
                     {
                         await action();
@@ -219,6 +226,24 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
         }
     }
 
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                _dbContext.Dispose();
+            }
+            _disposed = true;
+        }
+    }
+
     /// <summary>
     /// Fetches a (possibly cached) instance of repository.
     /// </summary>
@@ -235,7 +260,7 @@ public abstract class UnitOfWork(DbContext dbContext) : IUnitOfWork
             {
                 if (Unsafe.IsNullRef(ref value) || value is not TRepository)
                 {
-                    if (Activator.CreateInstance(typeof(TRepository), dbContext) is not TRepository repository)
+                    if (Activator.CreateInstance(typeof(TRepository), _dbContext) is not TRepository repository)
                         throw new InvalidOperationException(string.Format(Resources.Text_Error_TypeInstantiationFailed, typeof(TRepository).Name));
                     value = repository;
                 }
