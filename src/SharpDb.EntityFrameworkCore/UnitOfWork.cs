@@ -257,7 +257,7 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     /// <typeparam name="TRepository">Type of repository that targets entity</typeparam>
     /// <returns></returns>
     /// <exception cref="InvalidOperationException"></exception>
-    protected TRepository GetRepository<TEntity, TRepository>() where TRepository : IRepository<TEntity> where TEntity : class
+    protected TRepository GetRepository<TRepository>() where TRepository : IRepository
     {
         ref object value = ref CollectionsMarshal.GetValueRefOrNullRef(_loadedRepositories, typeof(TRepository).GetHashCode());
         if (Unsafe.IsNullRef(ref value))

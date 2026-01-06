@@ -1,11 +1,17 @@
 ﻿namespace SharpDb;
 
 /// <summary>
+/// Contract based on 'repository' pattern for grouping operations behind an abstraction layer.
+/// This non-generic version should be used as a marker on every repository implementation.
+/// </summary>
+public interface IRepository { }
+
+/// <summary>
 /// Contract based on 'repository' pattern for grouping operations
-/// for a single entity behind an abstraction layer.
+/// for a specified entity behind an abstraction layer.
 /// </summary>
 /// <typeparam name="TEntity"></typeparam>
-public interface IRepository<TEntity> where TEntity : class
+public interface IRepository<TEntity> : IRepository where TEntity : class
 {
     /// <summary>
     /// Marks the entity as a new entry, possibly including all of its configured navigations
