@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Runtime.CompilerServices;
 
 namespace SharpDb.EntityFrameworkCore.Entities;
@@ -58,5 +59,6 @@ public abstract class Entity
 /// <typeparam name="TKey">Type of key</typeparam>
 public abstract class Entity<TKey> : Entity where TKey : struct, IEquatable<TKey>
 {
+    [Key]
     public virtual TKey Id { get; set; }
 }
