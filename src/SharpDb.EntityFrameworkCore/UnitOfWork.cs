@@ -257,7 +257,7 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     /// <typeparam name="TRepository">Type of repository that targets entity</typeparam>
     /// <returns></returns>
     /// <exception cref="InvalidOperationException"></exception>
-    protected TRepository GetRepository<TRepository>() where TRepository : IRepository
+    protected TRepository GetRepository<TRepository>(Func<TContext, TRepository> createRepository) where TRepository : IRepository
     {
         ref object value = ref CollectionsMarshal.GetValueRefOrNullRef(_loadedRepositories, typeof(TRepository).GetHashCode());
         if (Unsafe.IsNullRef(ref value))
@@ -266,7 +266,7 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             {
                 if (Unsafe.IsNullRef(ref value) || value is not TRepository)
                 {
-                    if (Activator.CreateInstance(typeof(TRepository), _dbContext) is not TRepository repository)
+                    if (createRepository is null || createRepository(_dbContext) is not TRepository repository)
                         throw new InvalidOperationException(string.Format(Resources.Text_Error_TypeInstantiationFailed, typeof(TRepository).Name));
                     value = repository;
                 }
