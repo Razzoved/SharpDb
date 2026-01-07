@@ -259,19 +259,23 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     /// <exception cref="InvalidOperationException"></exception>
     protected TRepository GetRepository<TRepository>(Func<TContext, TRepository> createRepository) where TRepository : IRepository
     {
-        ref object value = ref CollectionsMarshal.GetValueRefOrNullRef(_loadedRepositories, typeof(TRepository).GetHashCode());
-        if (Unsafe.IsNullRef(ref value))
+        int key = typeof(TRepository).GetHashCode();
+
+        // First try to get the repository without locking
+        ref object value = ref CollectionsMarshal.GetValueRefOrNullRef(_loadedRepositories, key);
+        if (!Unsafe.IsNullRef(ref value))
+            return (TRepository)value;
+
+        // If not found, lock and try again (double-checked locking), else insert
+        lock (_loadedRepositoriesLock)
         {
-            lock (_loadedRepositoriesLock)
-            {
-                if (Unsafe.IsNullRef(ref value) || value is not TRepository)
-                {
-                    if (createRepository is null || createRepository(_dbContext) is not TRepository repository)
-                        throw new InvalidOperationException(string.Format(Resources.Text_Error_TypeInstantiationFailed, typeof(TRepository).Name));
-                    value = repository;
-                }
-            }
+            ref object lockedValue = ref CollectionsMarshal.GetValueRefOrNullRef(_loadedRepositories, key);
+            if (!Unsafe.IsNullRef(ref lockedValue))
+                return (TRepository)lockedValue;
+            if (createRepository is null || createRepository(_dbContext) is not TRepository repository)
+                throw new InvalidOperationException(string.Format(Resources.Text_Error_TypeInstantiationFailed, typeof(TRepository).Name));
+            _loadedRepositories[key] = repository;
+            return repository;
         }
-        return (TRepository)value;
     }
 }
