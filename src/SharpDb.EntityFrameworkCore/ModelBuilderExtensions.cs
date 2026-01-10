@@ -13,7 +13,8 @@ public static class ModelBuilderExtensions
     /// When any of the discovered configurations fails to apply it is retried at the end.
     /// </summary>
     /// <param name="modelBuilder">Model builder instance</param>
-    /// <param name="retryCount">Number of times a single configuration may be retried</param>
+    /// <param name="assembly">Assembly to load configurations from</param>
+    /// <param name="predicate">Filter for configurations to be applied</param>
     /// <exception cref="NullReferenceException"></exception>
     /// <inheritdoc cref="ModelBuilder.ApplyConfigurationsFromAssembly(Assembly, Func{Type, bool}?)"/>
     [RequiresUnreferencedCode("Uses reflection to gather configurations")]
@@ -45,7 +46,7 @@ public static class ModelBuilderExtensions
                     existingConfigs.Add((
                         Type: t,
                         Interface: i,
-                        Instance: typeInstance ??= Activator.CreateInstance(t) ?? throw new NullReferenceException(string.Format(Resources.Text_Error_TypeInstantiationFailed, t.Name))));
+                        Instance: typeInstance));
                 }
             }
         }
@@ -56,8 +57,6 @@ public static class ModelBuilderExtensions
         {
             graph.AddType(t);
         }
-
-        var x = graph.Flatten();
 
         // Apply configurations in dependency order
         foreach (var entityType in graph.Flatten())
@@ -76,24 +75,9 @@ public static class ModelBuilderExtensions
         return modelBuilder;
     }
 
-    private sealed class DependencyNode
+    private readonly ref struct TypeDependencyGraph()
     {
-        public readonly Type Type;
-        public readonly HashSet<DependencyNode> Dependencies;
-
-        public DependencyNode(Type type)
-        {
-            ArgumentNullException.ThrowIfNull(type, nameof(type));
-            Type = type;
-            Dependencies = [];
-        }
-    }
-
-    private readonly ref struct TypeDependencyGraph
-    {
-        private readonly Dictionary<Type, HashSet<Type>> _graph;
-
-        public TypeDependencyGraph() { _graph = []; }
+        private readonly Dictionary<Type, HashSet<Type>> _graph = [];
 
         private IEnumerable<Type> Vertices => _graph.Keys;
         private int VertexCount => _graph.Count;
@@ -156,7 +140,7 @@ public static class ModelBuilderExtensions
                     var arg = type.GetGenericArguments().LastOrDefault();
                     if (arg is not null) type = arg;
                 }
-                if (Nullable.GetUnderlyingType(type) is not Type underlyingType) break;
+                if (Nullable.GetUnderlyingType(type) is not { } underlyingType) break;
                 type = underlyingType;
             }
             if (type == typeof(string) || type.IsPrimitive) return null;
@@ -166,9 +150,7 @@ public static class ModelBuilderExtensions
 
         private void BuildDependencies(Type type, HashSet<Type> visited)
         {
-            if (visited.Contains(type)) return;
-
-            visited.Add(type);
+            if (!visited.Add(type)) return;
 
             if (!_graph.TryGetValue(type, out var dependencies))
             {
@@ -194,7 +176,6 @@ public static class ModelBuilderExtensions
         /// <summary>
         /// Fetches first strongly connected component via Tarjan's algorithm.
         /// </summary>
-        /// <param name="nodes">Starting nodes to be searched</param>
         /// <returns>Collection of types that are part of the SCC</returns>
         private List<List<Type>> GetStronglyConnectedComponents()
         {
@@ -238,7 +219,9 @@ public static class ModelBuilderExtensions
                 }
                 else if (enumeratorStack.Count > 0) // Level up
                 {
+                    enumerator.Dispose();
                     enumerator = enumeratorStack.Pop();
+
                     Type v = enumerator.Current;
                     int vIndex = indexMap[v];
                     int min = minStack.Pop();
@@ -250,11 +233,10 @@ public static class ModelBuilderExtensions
                     else
                     {
                         List<Type> scc = [];
-                        Type w;
                         int wIndex;
                         do
                         {
-                            w = stack.Pop();
+                            Type w = stack.Pop();
                             wIndex = indexMap[w];
                             scc.Add(w);
                             low[wIndex] = VertexCount;
@@ -274,6 +256,7 @@ public static class ModelBuilderExtensions
                 }
             }
 
+            enumerator.Dispose();
             return sccs;
         }
 
@@ -311,7 +294,7 @@ public static class ModelBuilderExtensions
         }
 
         /// <summary>
-        /// Orderes a list of types with predefined heurestics.
+        /// Orders a list of types with predefined heuristics.
         /// </summary>
         /// <param name="types">Types to be ordered</param>
         /// <returns>Ordered types</returns>
