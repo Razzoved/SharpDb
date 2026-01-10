@@ -37,7 +37,7 @@ public static class DatabaseFacadeExtensions
 
                 await TryConnect(dbCommand);
 
-                using var dbReader = await dbCommand.ExecuteReaderAsync();
+                await using var dbReader = await dbCommand.ExecuteReaderAsync();
                 if (await dbReader.ReadAsync())
                 {
                     var entity = reader(dbReader);
@@ -75,7 +75,7 @@ public static class DatabaseFacadeExtensions
 
                 await TryConnect(dbCommand);
 
-                using var dbReader = await dbCommand.ExecuteReaderAsync();
+                await using var dbReader = await dbCommand.ExecuteReaderAsync();
                 List<T> events = new(128);
                 while (await dbReader.ReadAsync())
                 {
@@ -141,7 +141,7 @@ public static class DatabaseFacadeExtensions
 
                 await TryConnect(dbCommand);
 
-                using var dbReader = await dbCommand.ExecuteReaderAsync();
+                await using var dbReader = await dbCommand.ExecuteReaderAsync();
                 if (await dbReader.ReadAsync())
                 {
                     var entity = reader(dbReader);
@@ -179,7 +179,7 @@ public static class DatabaseFacadeExtensions
 
                 await TryConnect(dbCommand);
 
-                using var dbReader = await dbCommand.ExecuteReaderAsync();
+                await using var dbReader = await dbCommand.ExecuteReaderAsync();
                 List<T> events = new(128);
                 while (await dbReader.ReadAsync())
                 {
@@ -243,7 +243,7 @@ public static class DatabaseFacadeExtensions
     {
         DbCommand command;
 
-        if (database.CurrentTransaction?.GetDbTransaction() is DbTransaction transaction)
+        if (database.CurrentTransaction?.GetDbTransaction() is { } transaction)
         {
             if (transaction.Connection is null)
                 throw new InvalidOperationException(Resources.Text_Error_Transaction_MissingConnection);
@@ -335,15 +335,14 @@ public static class DatabaseFacadeExtensions
 
     private static async Task<TResult> RunCommandAsync<TResult>(this DatabaseFacade database, Func<DbCommand, Task<TResult>> commandAction)
     {
-        using var command = CreateCommand(database);
+        await using var command = CreateCommand(database);
         if (database.CurrentTransaction is not null)
         {
             return await commandAction(command);
         }
         else
         {
-            Task<TResult> lambdaAction() => commandAction(command);
-            return await database.CreateExecutionStrategy().ExecuteAsync(lambdaAction);
+            return await database.CreateExecutionStrategy().ExecuteAsync(command, commandAction);
         }
     }
 }
