@@ -231,6 +231,55 @@ public static class DatabaseFacadeExtensions
         return result;
     }
 
+    public static string GetSqlCommandText(this FormattableString sql)
+    {
+        object?[] args = sql.GetArguments();
+        if (args.Length == 0) return sql.Format;
+
+        ReadOnlySpan<char> sqlSpan = sql.Format.AsSpan();
+        StringBuilder sqlBuilder = new();
+        int parameterIndex = 0;
+
+        while (!sqlSpan.IsEmpty)
+        {
+            int index = sqlSpan.IndexOf('{');
+
+            // Add everything before the next '{'
+            if (index < 0)
+            {
+                sqlBuilder.Append(sqlSpan);
+                sqlSpan = [];
+                continue;
+            }
+            sqlBuilder.Append(sqlSpan[0..index]);
+            sqlSpan = sqlSpan[index..];
+
+            // Format parameter (or just add string if its not parameter)
+            if (!sqlSpan.StartsWith('{' + parameterIndex.ToString() + '}'))
+            {
+                sqlBuilder.Append('{');
+                sqlSpan = sqlSpan[1..];
+                continue;
+            }
+            sqlBuilder.Append($"@p{parameterIndex}");
+            sqlSpan = sqlSpan[(2 + parameterIndex.ToString().Length)..];
+            parameterIndex++;
+        }
+
+        return sqlBuilder.ToString();
+    }
+
+    public static DbParameter[] GetSqlCommandParameters(this FormattableString sql)
+    {
+        object?[] args = sql.GetArguments();
+        DbParameter[] parameters = new DbParameter[args.Length];
+        for (int i = 0; i < args.Length; i++)
+        {
+            parameters[i] = new DbParameter($"@p{i}", args[i] ?? DBNull.Value);
+        }
+        return parameters;
+    }
+
     /// <summary>
     /// Creates a DbCommand associated with the given DatabaseFacade, taking into account any current transaction.
     /// The created command should always be disposed of by the caller.
@@ -282,55 +331,6 @@ public static class DatabaseFacadeExtensions
             param.Value = p.Value ?? DBNull.Value;
             command.Parameters.Add(param);
         }
-    }
-
-    internal static string GetSqlCommandText(this FormattableString sql)
-    {
-        object?[] args = sql.GetArguments();
-        if (args.Length == 0) return sql.Format;
-
-        ReadOnlySpan<char> sqlSpan = sql.Format.AsSpan();
-        StringBuilder sqlBuilder = new();
-        int parameterIndex = 0;
-
-        while (!sqlSpan.IsEmpty)
-        {
-            int index = sqlSpan.IndexOf('{');
-
-            // Add everything before the next '{'
-            if (index < 0)
-            {
-                sqlBuilder.Append(sqlSpan);
-                sqlSpan = [];
-                continue;
-            }
-            sqlBuilder.Append(sqlSpan[0..index]);
-            sqlSpan = sqlSpan[index..];
-
-            // Format parameter (or just add string if its not parameter)
-            if (!sqlSpan.StartsWith('{' + parameterIndex.ToString() + '}'))
-            {
-                sqlBuilder.Append('{');
-                sqlSpan = sqlSpan[1..];
-                continue;
-            }
-            sqlBuilder.Append($"@p{parameterIndex}");
-            sqlSpan = sqlSpan[(2 + parameterIndex.ToString().Length)..];
-            parameterIndex++;
-        }
-
-        return sqlBuilder.ToString();
-    }
-
-    internal static DbParameter[] GetSqlCommandParameters(this FormattableString sql)
-    {
-        object?[] args = sql.GetArguments();
-        DbParameter[] parameters = new DbParameter[args.Length];
-        for (int i = 0; i < args.Length; i++)
-        {
-            parameters[i] = new($"@p{i}", args[i] ?? DBNull.Value);
-        }
-        return parameters;
     }
 
     private static async Task<TResult> RunCommandAsync<TResult>(this DatabaseFacade database, Func<DbCommand, Task<TResult>> commandAction)
