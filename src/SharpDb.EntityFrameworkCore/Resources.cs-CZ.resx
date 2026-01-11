@@ -141,4 +141,7 @@
   <data name="Text.Error.TypeInstantiationFailed" xml:space="preserve">
     <value>Nepodařilo se vytvořit instanci typu `{0}`.</value>
   </data>
+  <data name="Text.Error.Repository.AttachNotSupported" xml:space="preserve">
+    <value>Repositář `{0}` ({1}) nepodporuje operaci `Připojit` - IsUpdateEnabled == false.</value>
+  </data>
 </root>

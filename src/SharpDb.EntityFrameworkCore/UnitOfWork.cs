@@ -32,20 +32,6 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     /// </summary>
     public SqlRunner Sql => _sql ??= new(_dbContext.Database);
 
-    public void Attach<TEntity>(TEntity entity) where TEntity : class
-    {
-        var entry = _dbContext.Entry(entity);
-        if (entry.State == EntityState.Detached)
-            entry.State = EntityState.Unchanged;
-    }
-
-    public void Detach<TEntity>(TEntity entity) where TEntity : class
-    {
-        var entry = _dbContext.Entry(entity);
-        if (entry.State != EntityState.Detached)
-            entry.State = EntityState.Detached;
-    }
-
     public int SaveChanges()
     {
         int affectedRows = _dbContext.SaveChanges();
