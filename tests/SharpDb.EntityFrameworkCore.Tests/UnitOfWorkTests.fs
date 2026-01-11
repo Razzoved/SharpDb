@@ -7,6 +7,7 @@ open System.Threading.Tasks
 open Microsoft.Data.Sqlite
 open Microsoft.EntityFrameworkCore
 open Xunit
+open SharpDb.EntityFrameworkCore.Repositories
 
 module UnitOfWorkTests =
 
@@ -24,6 +25,7 @@ module UnitOfWorkTests =
     type DummyUnitOfWork(ctxFactory: IDbContextFactory<DummyDbContext>) =
         inherit UnitOfWork<DummyDbContext>(ctxFactory)
         member this.PrivateContext = this.DbContext
+        member this.Repository = this.GetRepository(fun ctx -> DefaultRepository<DummyEntity>(ctx))
 
     type InMemoryContextFactory() =
         interface IDbContextFactory<DummyDbContext> with
@@ -60,7 +62,7 @@ module UnitOfWorkTests =
         let entity = DummyEntity()
         uow.PrivateContext.Add(entity) |> ignore
         uow.PrivateContext.Entry(entity).State <- EntityState.Detached
-        uow.Attach(entity)
+        uow.Repository.Attach(entity)
         Assert.Equal(EntityState.Unchanged, uow.PrivateContext.Entry(entity).State)
 
     [<Fact>]
@@ -70,7 +72,7 @@ module UnitOfWorkTests =
         let entity = DummyEntity()
         uow.PrivateContext.Add(entity) |> ignore
         uow.PrivateContext.Entry(entity).State <- EntityState.Modified
-        uow.Attach(entity)
+        uow.Repository.Attach(entity)
         Assert.Equal(EntityState.Modified, uow.PrivateContext.Entry(entity).State)
 
     [<Fact>]
@@ -79,7 +81,7 @@ module UnitOfWorkTests =
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
         Assert.Equal(EntityState.Detached, uow.PrivateContext.Entry(entity).State)
-        uow.Attach(entity)
+        uow.Repository.Attach(entity)
         Assert.Equal(EntityState.Unchanged, uow.PrivateContext.Entry(entity).State)
 
     [<Fact>]
@@ -88,7 +90,7 @@ module UnitOfWorkTests =
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
         uow.PrivateContext.Add(entity) |> ignore
-        uow.Detach(entity)
+        uow.Repository.Detach(entity)
         Assert.Equal(EntityState.Detached, uow.PrivateContext.Entry(entity).State)
 
     [<Fact>]
@@ -96,7 +98,7 @@ module UnitOfWorkTests =
         let dbContextFactory = new InMemoryContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
-        uow.PrivateContext.Add(entity) |> ignore
+        uow.Repository.Add(entity) |> ignore
         let affected = uow.SaveChanges()
         Assert.Equal(1, affected)
 
@@ -105,7 +107,7 @@ module UnitOfWorkTests =
         let dbContextFactory = new InMemoryContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
-        uow.PrivateContext.Add(entity) |> ignore
+        uow.Repository.Add(entity) |> ignore
         let affected = uow.SaveChangesAsync().Result
         Assert.Equal(1, affected)
 
@@ -114,7 +116,7 @@ module UnitOfWorkTests =
         let dbContextFactory = new InMemoryContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
-        uow.PrivateContext.Add(entity) |> ignore
+        uow.Repository.Add(entity) |> ignore
         uow.DiscardChanges()
         Assert.Empty(uow.PrivateContext.ChangeTracker.Entries())
 
@@ -126,7 +128,7 @@ module UnitOfWorkTests =
         entity.Name <- "Test"
         Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
         let result = uow.InTransaction(fun () ->
-            uow.PrivateContext.Add(entity) |> ignore
+            uow.Repository.Add(entity) |> ignore
             uow.SaveChanges() |> ignore
         )
         Assert.True(result.IsSuccess)
@@ -141,7 +143,7 @@ module UnitOfWorkTests =
             entity.Name <- "Test"
             Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
             let! result = uow.InTransactionAsync(fun () -> task {
-                uow.PrivateContext.Add(entity) |> ignore
+                uow.Repository.Add(entity) |> ignore
                 uow.SaveChangesAsync() |> ignore
             })
             Assert.True(result.IsSuccess)
@@ -156,7 +158,7 @@ module UnitOfWorkTests =
         entity.Name <- "Test"
         Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
         let result = uow.InTransaction(fun () ->
-            uow.PrivateContext.Add(entity) |> ignore
+            uow.Repository.Add(entity) |> ignore
             uow.SaveChanges() |> ignore
             raise (Exception("Test exception"))
         )
@@ -170,7 +172,7 @@ module UnitOfWorkTests =
         let entity = DummyEntity()
         entity.Name <- "Test"
         Assert.Empty(uow.PrivateContext.Set<DummyEntity>().Local) |> ignore
-        uow.PrivateContext.Add(entity) |> ignore
+        uow.Repository.Add(entity) |> ignore
         Assert.Single(uow.PrivateContext.Set<DummyEntity>().Local) |> ignore
         let result = uow.InTransaction(fun () ->
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Added)
@@ -192,7 +194,7 @@ module UnitOfWorkTests =
         let entity = DummyEntity()
         entity.Name <- "Test"
         Assert.Empty(uow.PrivateContext.Set<DummyEntity>().Local) |> ignore
-        uow.PrivateContext.Add(entity) |> ignore
+        uow.Repository.Add(entity) |> ignore
         Assert.Single(uow.PrivateContext.Set<DummyEntity>().Local) |> ignore
         let result = uow.InTransaction(fun () ->
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Added)
@@ -201,7 +203,7 @@ module UnitOfWorkTests =
             Assert.True(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = "Changed1") |> Async.AwaitTask |> Async.RunSynchronously)
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Unchanged)
             entity.Name <- "Changed2"
-            uow.PrivateContext.Update(entity) |> ignore
+            uow.Repository.Update(entity) |> ignore
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Modified)
             uow.SaveChanges() |> ignore
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Unchanged)
@@ -216,4 +218,133 @@ module UnitOfWorkTests =
         Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Added)
         Assert.Equal("Test", entity.Name)
 
+    [<Fact>]
+    let ``TransactionContext flows with async but is isolated per UnitOfWork`` () =
+        use dbContextFactory1 = new SqliteContextFactory()
+        use dbContextFactory2 = new SqliteContextFactory()
+        use uow1 = new DummyUnitOfWork(dbContextFactory1)
+        use uow2 = new DummyUnitOfWork(dbContextFactory2)
+
+        let mutable transactionId1 = Nullable()
+        let mutable transactionId2 = Nullable()
+
+        let r1 = uow1.InTransaction(fun () ->
+            transactionId1 <- TransactionContext.GetCurrent(uow1.PrivateContext.Database).GetHashCode() |> Nullable
+            let r2 = uow2.InTransaction(fun () ->
+                transactionId2 <- TransactionContext.GetCurrent(uow2.PrivateContext.Database).GetHashCode() |> Nullable
+                uow2.Repository.Add(DummyEntity(Name = "B")) |> ignore
+                Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow2.PrivateContext.Database).AffectedRows |> int64)
+                uow2.SaveChanges() |> ignore
+                Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow2.PrivateContext.Database).AffectedRows |> int64)
+            )
+            Assert.True(r2.IsSuccess)
+            Assert.Equal<int64>(1, r2.AffectedRows)
+            Assert.Null(TransactionContext.GetCurrent(uow2.PrivateContext.Database))
+            Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow1.PrivateContext.Database).AffectedRows |> int64)
+            uow1.Repository.Add(DummyEntity(Name = "A")) |> ignore
+            uow1.SaveChanges() |> ignore
+            Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow1.PrivateContext.Database).AffectedRows |> int64)
+        )
+        Assert.True(r1.IsSuccess)
+        Assert.Equal<int64>(1, r1.AffectedRows)
+        Assert.Null(TransactionContext.GetCurrent(uow1.PrivateContext.Database))
+
+        // Both transactions should have distinct TransactionContext.Transaction values
+        Assert.True(transactionId1.HasValue)
+        Assert.True(transactionId2.HasValue)
+        Assert.NotEqual(transactionId1, transactionId2)
+
+    [<Fact>]
+    let ``TransactionContext flows with async and rollsback on error`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+
+        let mutable transactionId1 = Nullable()
+        let mutable transactionId2 = Nullable()
+        let mutable transactionId3 = Nullable()
+
+        let r1 = uow.InTransaction(fun () ->
+            transactionId1 <- TransactionContext.GetCurrent(uow.PrivateContext.Database).GetHashCode() |> Nullable
+            let r2 = uow.InTransaction(fun () ->
+                transactionId2 <- TransactionContext.GetCurrent(uow.PrivateContext.Database).GetHashCode() |> Nullable
+                uow.Repository.Add(DummyEntity(Name = "B")) |> ignore
+                Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+                uow.SaveChanges() |> ignore
+                Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+                let r3 = uow.InTransaction(fun () ->
+                    transactionId3 <- TransactionContext.GetCurrent(uow.PrivateContext.Database).GetHashCode() |> Nullable
+                    uow.Repository.Add(DummyEntity(Name = "C")) |> ignore
+                    Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+                    uow.SaveChanges() |> ignore
+                    Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+                )
+                Assert.True(r3.IsSuccess)
+                Assert.Equal<int64>(1, r3.AffectedRows);
+                Assert.Equal<int64>(2, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+                raise (Exception("r2"))
+            )
+            Assert.False(r2.IsSuccess)
+            Assert.Equal<int64>(0, r2.AffectedRows)
+            Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+            uow.Repository.Add(DummyEntity(Name = "A")) |> ignore
+            uow.SaveChanges() |> ignore
+            Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+        )
+        Assert.True(r1.IsSuccess)
+        Assert.Equal<int64>(1, r1.AffectedRows)
+        Assert.Null(TransactionContext.GetCurrent(uow.PrivateContext.Database))
+
+        // Both transactions should have same TransactionContext.Transaction values
+        Assert.True(transactionId1.HasValue)
+        Assert.True(transactionId2.HasValue)
+        Assert.True(transactionId3.HasValue)
+        Assert.Equal(transactionId1, transactionId2)
+        Assert.Equal(transactionId1, transactionId3)
+
+    [<Fact>]
+    let ``TransactionContext flows with async and rollsback on deep inner error`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+
+        let mutable transactionId1 = Nullable()
+        let mutable transactionId2 = Nullable()
+        let mutable transactionId3 = Nullable()
+
+        let r1 = uow.InTransaction(fun () ->
+            transactionId1 <- TransactionContext.GetCurrent(uow.PrivateContext.Database).GetHashCode() |> Nullable
+            let r2 = uow.InTransaction(fun () ->
+                transactionId2 <- TransactionContext.GetCurrent(uow.PrivateContext.Database).GetHashCode() |> Nullable
+                uow.Repository.Add(DummyEntity(Name = "B")) |> ignore
+                Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+                uow.SaveChanges() |> ignore
+                Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+                let r3 = uow.InTransaction(fun () ->
+                    transactionId3 <- TransactionContext.GetCurrent(uow.PrivateContext.Database).GetHashCode() |> Nullable
+                    uow.Repository.Add(DummyEntity(Name = "C")) |> ignore
+                    Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+                    uow.SaveChanges() |> ignore
+                    Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+                    raise (Exception("r3"))
+                )
+                Assert.False(r3.IsSuccess)
+                Assert.Equal<int64>(0, r3.AffectedRows);
+                Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+            )
+            Assert.True(r2.IsSuccess)
+            Assert.Equal<int64>(1, r2.AffectedRows)
+            Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+            uow.Repository.Add(DummyEntity(Name = "A")) |> ignore
+            uow.SaveChanges() |> ignore
+            Assert.Equal<int64>(2, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
+        )
+        Assert.True(r1.IsSuccess)
+        Assert.Equal<int64>(2, r1.AffectedRows)
+        Assert.Null(TransactionContext.GetCurrent(uow.PrivateContext.Database))
+
+        // Both transactions should have same TransactionContext.Transaction values
+        Assert.True(transactionId1.HasValue)
+        Assert.True(transactionId2.HasValue)
+        Assert.True(transactionId3.HasValue)
+        Assert.Equal(transactionId1, transactionId2)
+        Assert.Equal(transactionId1, transactionId3)
 
