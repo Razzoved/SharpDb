@@ -29,12 +29,18 @@ public readonly struct DbParameter
         sb.Append(Name);
         sb.Append(" = ");
 
-        if (Value is null)
-            sb.Append("null");
-        else if (Value is string strValue)
-            sb.Append('\'').Append(strValue.Replace("'", "''")).Append('\'');
-        else
-            sb.Append(Value.ToString());
+        switch (Value)
+        {
+            case null:
+                sb.Append("null");
+                break;
+            case string strValue:
+                sb.Append('\'').Append(strValue.Replace("'", "''")).Append('\'');
+                break;
+            default:
+                sb.Append(Value);
+                break;
+        }
 
         return sb.ToString();
     }

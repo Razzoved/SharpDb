@@ -103,6 +103,51 @@ module DatabaseFacadeExtensionsTests =
             conn.Dispose()
 
     [<Fact>]
+    let ``RawSqlFirstOrDefaultAsync returns null when no rows`` () =
+        let ctx, conn = createContextSqlite()
+        try
+            let db = ctx.Database
+            let task =
+                db.RawSqlFirstOrDefaultAsync<Nullable<int>>("SELECT 1 WHERE 1 = 0", (fun _ -> 1 |> Nullable))
+            let result = task.Result
+            Assert.True(result.IsSuccess)
+            Assert.Null(result.Data);
+        finally
+            ctx.Dispose()
+            conn.Close()
+            conn.Dispose()
+
+    [<Fact>]
+    let ``RawSqlFirstOrDefaultAsync returns correct value for one row`` () =
+        let ctx, conn = createContextSqlite()
+        try
+            let db = ctx.Database
+            let task =
+                db.RawSqlFirstOrDefaultAsync<int>("SELECT 42", (fun r -> r.GetInt32(0)))
+            let result = task.Result
+            Assert.True(result.IsSuccess)
+            Assert.Equal(42, result.Data)
+        finally
+            ctx.Dispose()
+            conn.Close()
+            conn.Dispose()
+
+    [<Fact>]
+    let ``RawSqlFirstOrDefaultAsync returns correct value for multiple rows`` () =
+        let ctx, conn = createContextSqlite()
+        try
+            let db = ctx.Database
+            let task =
+                db.RawSqlFirstOrDefaultAsync<int>("SELECT 1 UNION SELECT 2", (fun r -> r.GetInt32(0)))
+            let result = task.Result
+            Assert.True(result.IsSuccess)
+            Assert.Equal(1, result.Data)
+        finally
+            ctx.Dispose()
+            conn.Close()
+            conn.Dispose()
+
+    [<Fact>]
     let ``RawSqlManyAsync returns empty array when no rows`` () =
         let ctx, conn = createContextSqlite()
         try
@@ -126,7 +171,7 @@ module DatabaseFacadeExtensionsTests =
                 db.RawSqlManyAsync<int>("SELECT 1 UNION SELECT 2 UNION SELECT 3", (fun r -> r.GetInt32(0)))
             let result = task.Result
             Assert.True(result.IsSuccess)
-            Assert.Equal<int[]>([|1;2;3|], result.Data)
+            Assert.Equal([|1;2;3|], result.Data)
         finally
             ctx.Dispose()
             conn.Close()
@@ -186,7 +231,7 @@ module DatabaseFacadeExtensionsTests =
             let task = db.SqlManyAsync(sql, fun r -> r.GetInt32(0))
             let result = task.Result
             Assert.True(result.IsSuccess)
-            Assert.Equal<int[]>([|1;2;3|], result.Data)
+            Assert.Equal([|1;2;3|], result.Data)
         finally
             ctx.Dispose()
             conn.Close()

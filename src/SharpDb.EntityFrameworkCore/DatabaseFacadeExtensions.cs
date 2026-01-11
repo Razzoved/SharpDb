@@ -3,49 +3,50 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace SharpDb.EntityFrameworkCore;
 
 public static class DatabaseFacadeExtensions
 {
-    public static int SqlQueryCommandTimeout { get; set; } = 600;
-    public static int SqlExecuteCommandTimeout { get; set; } = 600;
-    public static int SqlStoredProcedureTimeout { get; set; } = 600;
+    public static int SqlQueryCommandTimeout { get; set; } = 120;
+    public static int SqlExecuteCommandTimeout { get; set; } = 120;
+    public static int SqlStoredProcedureTimeout { get; set; } = 120;
 
     public static ValueTask<DbQueryResult<T>> SqlSingleAsync<T>(this DatabaseFacade database, FormattableString sql, Func<DbDataReader, T> reader)
-        => RawSqlSingleAsync(database, sql.GetSqlCommandText(), reader, sql.GetSqlCommandParameters());
+        => database.RawSqlSingleAsync(sql.GetSqlCommandText(), reader, sql.GetSqlCommandParameters());
 
-    public static ValueTask<DbQueryResult<T[]>> SqlManyAsync<T>(this DatabaseFacade database, FormattableString sql, Func<DbDataReader, T> reader)
-        => RawSqlManyAsync(database, sql.GetSqlCommandText(), reader, sql.GetSqlCommandParameters());
+    public static ValueTask<DbQueryResult<T?>> SqlFirstOrDefaultAsync<T>(this DatabaseFacade database, FormattableString sql, Func<DbDataReader, T?> reader)
+        => database.RawSqlFirstOrDefaultAsync(sql.GetSqlCommandText(), reader, sql.GetSqlCommandParameters());
+
+    public static ValueTask<DbQueryResult<IReadOnlyList<T>>> SqlManyAsync<T>(this DatabaseFacade database, FormattableString sql, Func<DbDataReader, T> reader)
+        => database.RawSqlManyAsync(sql.GetSqlCommandText(), reader, sql.GetSqlCommandParameters());
 
     public static ValueTask<DbExecResult> SqlExecuteAsync(this DatabaseFacade database, FormattableString sql)
-        => RawSqlExecuteAsync(database, sql.GetSqlCommandText(), sql.GetSqlCommandParameters());
+        => database.RawSqlExecuteAsync(sql.GetSqlCommandText(), sql.GetSqlCommandParameters());
 
     public static async ValueTask<DbQueryResult<T>> RawSqlSingleAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
     {
-        DbQueryResult<T> result;
         try
         {
-            result = await database.RunCommandAsync(async dbCommand =>
+            return await database.RunCommandAsync((sql, reader, parameters), async args =>
             {
-                dbCommand.CommandType = System.Data.CommandType.Text;
-                dbCommand.CommandTimeout = SqlQueryCommandTimeout;
-                dbCommand.AddSqlCommandParameters(parameters);
-                dbCommand.CommandText = sql;
+                args.cmd.CommandType = System.Data.CommandType.Text;
+                args.cmd.CommandTimeout = SqlQueryCommandTimeout;
+                args.cmd.AddSqlCommandParameters(args.state.parameters);
+                args.cmd.CommandText = args.state.sql;
 
-                await TryConnect(dbCommand);
+                await TryConnect(args.cmd);
 
-                using var dbReader = await dbCommand.ExecuteReaderAsync();
+                await using var dbReader = await args.cmd.ExecuteReaderAsync();
                 if (await dbReader.ReadAsync())
                 {
-                    var entity = reader(dbReader);
+                    var entity = args.state.reader(dbReader);
                     if (!await dbReader.ReadAsync())
                     {
-                        if (TransactionContext.Transaction is not null && dbReader.RecordsAffected > 0)
+                        if (dbReader.RecordsAffected > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
                         {
-                            TransactionContext.AddAffectedRows((uint)dbReader.RecordsAffected);
+                            transactionContext.AddAffectedRows((uint)dbReader.RecordsAffected);
                         }
                         return DbQueryResult<T>.Success(entity);
                     }
@@ -56,100 +57,124 @@ public static class DatabaseFacadeExtensions
         }
         catch (Exception e)
         {
-            result = DbQueryResult<T>.Failure(new ExceptionDbError(e));
+            return DbQueryResult<T>.Failure(new ExceptionDbError(e));
         }
-        return result;
     }
 
-    public static async ValueTask<DbQueryResult<T[]>> RawSqlManyAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    public static async ValueTask<DbQueryResult<T?>> RawSqlFirstOrDefaultAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
     {
-        DbQueryResult<T[]> result;
         try
         {
-            result = await database.RunCommandAsync(async dbCommand =>
+            return await database.RunCommandAsync((sql, reader, parameters), async args =>
             {
-                dbCommand.CommandType = System.Data.CommandType.Text;
-                dbCommand.CommandTimeout = SqlQueryCommandTimeout;
-                dbCommand.AddSqlCommandParameters(parameters);
-                dbCommand.CommandText = sql;
+                args.cmd.CommandType = System.Data.CommandType.Text;
+                args.cmd.CommandTimeout = SqlQueryCommandTimeout;
+                args.cmd.AddSqlCommandParameters(args.state.parameters);
+                args.cmd.CommandText = args.state.sql;
 
-                await TryConnect(dbCommand);
+                await TryConnect(args.cmd);
 
-                using var dbReader = await dbCommand.ExecuteReaderAsync();
-                List<T> events = new(128);
-                while (await dbReader.ReadAsync())
+                await using var dbReader = await args.cmd.ExecuteReaderAsync();
+                if (await dbReader.ReadAsync())
                 {
-                    var entity = reader(dbReader);
-                    events.Add(entity);
+                    var entity = args.state.reader(dbReader);
+                    if (dbReader.RecordsAffected > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
+                    {
+                        transactionContext.AddAffectedRows((uint)dbReader.RecordsAffected);
+                    }
+                    return DbQueryResult<T?>.Success(entity);
                 }
-                if (TransactionContext.Transaction is not null && dbReader.RecordsAffected > 0)
-                {
-                    TransactionContext.AddAffectedRows((uint)dbReader.RecordsAffected);
-                }
-
-                return DbQueryResult<T[]>.Success([.. events]);
+                return DbQueryResult<T?>.Success(default);
             });
         }
         catch (Exception e)
         {
-            result = DbQueryResult<T[]>.Failure(new ExceptionDbError(e));
+            return DbQueryResult<T?>.Failure(new ExceptionDbError(e));
         }
-        return result;
+    }
+
+    public static async ValueTask<DbQueryResult<IReadOnlyList<T>>> RawSqlManyAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    {
+        try
+        {
+            return await database.RunCommandAsync((sql, reader, parameters), async args =>
+            {
+                args.cmd.CommandType = System.Data.CommandType.Text;
+                args.cmd.CommandTimeout = SqlQueryCommandTimeout;
+                args.cmd.AddSqlCommandParameters(args.state.parameters);
+                args.cmd.CommandText = args.state.sql;
+
+                await TryConnect(args.cmd);
+
+                await using var dbReader = await args.cmd.ExecuteReaderAsync();
+                List<T> entities = new(128);
+                while (await dbReader.ReadAsync())
+                {
+                    var entity = args.state.reader(dbReader);
+                    entities.Add(entity);
+                }
+                if (dbReader.RecordsAffected > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
+                {
+                    transactionContext.AddAffectedRows((uint)dbReader.RecordsAffected);
+                }
+                return DbQueryResult<IReadOnlyList<T>>.Success(entities);
+            });
+        }
+        catch (Exception e)
+        {
+            return DbQueryResult<IReadOnlyList<T>>.Failure(new ExceptionDbError(e));
+        }
     }
 
     public static async ValueTask<DbExecResult> RawSqlExecuteAsync(this DatabaseFacade database, string sql, params DbParameter[] parameters)
     {
-        DbExecResult result;
         try
         {
-            result = await database.RunCommandAsync(async dbCommand =>
+            return await database.RunCommandAsync((sql, parameters), async args =>
             {
-                dbCommand.CommandType = System.Data.CommandType.Text;
-                dbCommand.CommandTimeout = SqlExecuteCommandTimeout;
-                dbCommand.AddSqlCommandParameters(parameters);
-                dbCommand.CommandText = sql;
+                args.cmd.CommandType = System.Data.CommandType.Text;
+                args.cmd.CommandTimeout = SqlExecuteCommandTimeout;
+                args.cmd.AddSqlCommandParameters(args.state.parameters);
+                args.cmd.CommandText = args.state.sql;
 
-                await TryConnect(dbCommand);
+                await TryConnect(args.cmd);
 
-                int affectedRows = await dbCommand.ExecuteNonQueryAsync();
-                if (TransactionContext.Transaction is not null && affectedRows > 0)
+                int affectedRows = await args.cmd.ExecuteNonQueryAsync();
+                if (affectedRows > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
                 {
-                    TransactionContext.AddAffectedRows((uint)affectedRows);
+                    transactionContext.AddAffectedRows((uint)affectedRows);
                 }
-
                 return DbExecResult.Success(affectedRows);
             });
         }
         catch (Exception e)
         {
-            result = DbExecResult.Failure(new ExceptionDbError(e));
+            return DbExecResult.Failure(new ExceptionDbError(e));
         }
-        return result;
     }
 
     public static async ValueTask<DbQueryResult<T>> StoredProcedureSingleAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
     {
-        DbQueryResult<T> result;
         try
         {
-            result = await database.RunCommandAsync(async dbCommand =>
+            return await database.RunCommandAsync((procedureName, reader, parameters), async args =>
             {
-                dbCommand.CommandType = System.Data.CommandType.StoredProcedure;
-                dbCommand.CommandTimeout = SqlStoredProcedureTimeout;
-                dbCommand.AddSqlCommandParameters(parameters);
-                dbCommand.CommandText = procedureName;
+                args.cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                args.cmd.CommandTimeout = SqlStoredProcedureTimeout;
+                args.cmd.AddSqlCommandParameters(args.state.parameters);
+                args.cmd.CommandText = args.state.procedureName;
 
-                await TryConnect(dbCommand);
+                await TryConnect(args.cmd);
 
-                using var dbReader = await dbCommand.ExecuteReaderAsync();
+                await using var dbReader = await args.cmd.ExecuteReaderAsync();
                 if (await dbReader.ReadAsync())
                 {
-                    var entity = reader(dbReader);
+                    T entity = args.state.reader(dbReader);
                     if (!await dbReader.ReadAsync())
                     {
-                        if (TransactionContext.Transaction is not null && dbReader.RecordsAffected > 0)
+                        if (dbReader.RecordsAffected > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
                         {
-                            TransactionContext.AddAffectedRows((uint)dbReader.RecordsAffected);
+                            transactionContext.AddAffectedRows((uint)dbReader.RecordsAffected);
                         }
                         return DbQueryResult<T>.Success(entity);
                     }
@@ -160,75 +185,151 @@ public static class DatabaseFacadeExtensions
         }
         catch (Exception e)
         {
-            result = DbQueryResult<T>.Failure(new ExceptionDbError(e));
+            return DbQueryResult<T>.Failure(new ExceptionDbError(e));
         }
-        return result;
     }
 
-    public static async ValueTask<DbQueryResult<T[]>> StoredProcedureManyAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    public static async ValueTask<DbQueryResult<T?>> StoredProcedureFirstOrDefaultAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
     {
-        DbQueryResult<T[]> result;
         try
         {
-            result = await database.RunCommandAsync(async dbCommand =>
+            return await database.RunCommandAsync((procedureName, reader, parameters), async args =>
             {
-                dbCommand.CommandType = System.Data.CommandType.StoredProcedure;
-                dbCommand.CommandTimeout = SqlStoredProcedureTimeout;
-                dbCommand.AddSqlCommandParameters(parameters);
-                dbCommand.CommandText = procedureName;
+                args.cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                args.cmd.CommandTimeout = SqlStoredProcedureTimeout;
+                args.cmd.AddSqlCommandParameters(args.state.parameters);
+                args.cmd.CommandText = args.state.procedureName;
 
-                await TryConnect(dbCommand);
+                await TryConnect(args.cmd);
 
-                using var dbReader = await dbCommand.ExecuteReaderAsync();
-                List<T> events = new(128);
-                while (await dbReader.ReadAsync())
+                await using var dbReader = await args.cmd.ExecuteReaderAsync();
+                if (await dbReader.ReadAsync())
                 {
-                    var entity = reader(dbReader);
-                    events.Add(entity);
+                    var entity = args.state.reader(dbReader);
+                    if (dbReader.RecordsAffected > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
+                    {
+                        transactionContext.AddAffectedRows((uint)dbReader.RecordsAffected);
+                    }
+                    return DbQueryResult<T?>.Success(entity);
                 }
-                if (TransactionContext.Transaction is not null && dbReader.RecordsAffected > 0)
-                {
-                    TransactionContext.AddAffectedRows((uint)dbReader.RecordsAffected);
-                }
-
-                return DbQueryResult<T[]>.Success([.. events]);
+                return DbQueryResult<T?>.Success(default);
             });
         }
         catch (Exception e)
         {
-            result = DbQueryResult<T[]>.Failure(new ExceptionDbError(e));
+            return DbQueryResult<T?>.Failure(new ExceptionDbError(e));
+        }
+    }
+
+    public static async ValueTask<DbQueryResult<IReadOnlyList<T>>> StoredProcedureManyAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    {
+        DbQueryResult<IReadOnlyList<T>> result;
+        try
+        {
+            result = await database.RunCommandAsync((procedureName, reader, parameters), async args =>
+            {
+                args.cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                args.cmd.CommandTimeout = SqlStoredProcedureTimeout;
+                args.cmd.AddSqlCommandParameters(args.state.parameters);
+                args.cmd.CommandText = args.state.procedureName;
+
+                await TryConnect(args.cmd);
+
+                await using var dbReader = await args.cmd.ExecuteReaderAsync();
+                List<T> entities = new(128);
+                while (await dbReader.ReadAsync())
+                {
+                    T entity = args.state.reader(dbReader);
+                    entities.Add(entity);
+                }
+                if (dbReader.RecordsAffected > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
+                {
+                    transactionContext.AddAffectedRows((uint)dbReader.RecordsAffected);
+                }
+                return DbQueryResult<IReadOnlyList<T>>.Success(entities);
+            });
+        }
+        catch (Exception e)
+        {
+            result = DbQueryResult<IReadOnlyList<T>>.Failure(new ExceptionDbError(e));
         }
         return result;
     }
 
     public static async ValueTask<DbExecResult> StoredProcedureExecuteAsync(this DatabaseFacade database, string procedureName, params DbParameter[] parameters)
     {
-        DbExecResult result;
         try
         {
-            result = await database.RunCommandAsync(async dbCommand =>
+            return await database.RunCommandAsync((procedureName, parameters), async args =>
             {
-                dbCommand.CommandType = System.Data.CommandType.StoredProcedure;
-                dbCommand.CommandTimeout = SqlStoredProcedureTimeout;
-                dbCommand.AddSqlCommandParameters(parameters);
-                dbCommand.CommandText = procedureName;
+                args.cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                args.cmd.CommandTimeout = SqlStoredProcedureTimeout;
+                args.cmd.AddSqlCommandParameters(args.state.parameters);
+                args.cmd.CommandText = args.state.procedureName;
 
-                await TryConnect(dbCommand);
+                await TryConnect(args.cmd);
 
-                int affectedRows = await dbCommand.ExecuteNonQueryAsync();
-                if (TransactionContext.Transaction is not null && affectedRows > 0)
+                int affectedRows = await args.cmd.ExecuteNonQueryAsync();
+                if (affectedRows > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
                 {
-                    TransactionContext.AddAffectedRows((uint)affectedRows);
+                    transactionContext.AddAffectedRows((uint)affectedRows);
                 }
-
                 return DbExecResult.Success(affectedRows);
             });
         }
         catch (Exception e)
         {
-            result = DbExecResult.Failure(new ExceptionDbError(e));
+            return DbExecResult.Failure(new ExceptionDbError(e));
         }
-        return result;
+    }
+
+    public static string GetSqlCommandText(this FormattableString sql)
+    {
+        object?[] args = sql.GetArguments();
+        if (args.Length == 0) return sql.Format;
+
+        ReadOnlySpan<char> sqlSpan = sql.Format.AsSpan();
+        StringBuilder sqlBuilder = new();
+        int parameterIndex = 0;
+
+        while (!sqlSpan.IsEmpty)
+        {
+            int index = sqlSpan.IndexOf('{');
+
+            // Add everything before the next '{'
+            if (index < 0)
+            {
+                sqlBuilder.Append(sqlSpan);
+                sqlSpan = [];
+                continue;
+            }
+            sqlBuilder.Append(sqlSpan[0..index]);
+            sqlSpan = sqlSpan[index..];
+
+            // Format parameter (or just add string if it's not parameter)
+            if (!sqlSpan.StartsWith('{' + parameterIndex.ToString() + '}'))
+            {
+                sqlBuilder.Append('{');
+                sqlSpan = sqlSpan[1..];
+                continue;
+            }
+            sqlBuilder.Append($"@p{parameterIndex}");
+            sqlSpan = sqlSpan[(2 + parameterIndex.ToString().Length)..];
+            parameterIndex++;
+        }
+
+        return sqlBuilder.ToString();
+    }
+
+    public static DbParameter[] GetSqlCommandParameters(this FormattableString sql)
+    {
+        object?[] args = sql.GetArguments();
+        DbParameter[] parameters = new DbParameter[args.Length];
+        for (int i = 0; i < args.Length; i++)
+        {
+            parameters[i] = new DbParameter($"@p{i}", args[i] ?? DBNull.Value);
+        }
+        return parameters;
     }
 
     /// <summary>
@@ -243,7 +344,7 @@ public static class DatabaseFacadeExtensions
     {
         DbCommand command;
 
-        if (database.CurrentTransaction?.GetDbTransaction() is DbTransaction transaction)
+        if (database.CurrentTransaction?.GetDbTransaction() is { } transaction)
         {
             if (transaction.Connection is null)
                 throw new InvalidOperationException(Resources.Text_Error_Transaction_MissingConnection);
@@ -284,66 +385,19 @@ public static class DatabaseFacadeExtensions
         }
     }
 
-    internal static string GetSqlCommandText(this FormattableString sql)
+    private static async Task<TResult> RunCommandAsync<TState, TResult>(
+        this DatabaseFacade database,
+        TState state,
+        Func<(DatabaseFacade db, DbCommand cmd, TState state), Task<TResult>> commandAction)
     {
-        object?[] args = sql.GetArguments();
-        if (args.Length == 0) return sql.Format;
-
-        ReadOnlySpan<char> sqlSpan = sql.Format.AsSpan();
-        StringBuilder sqlBuilder = new();
-        int parameterIndex = 0;
-
-        while (!sqlSpan.IsEmpty)
-        {
-            int index = sqlSpan.IndexOf('{');
-
-            // Add everything before the next '{'
-            if (index < 0)
-            {
-                sqlBuilder.Append(sqlSpan);
-                sqlSpan = [];
-                continue;
-            }
-            sqlBuilder.Append(sqlSpan[0..index]);
-            sqlSpan = sqlSpan[index..];
-
-            // Format parameter (or just add string if its not parameter)
-            if (!sqlSpan.StartsWith('{' + parameterIndex.ToString() + '}'))
-            {
-                sqlBuilder.Append('{');
-                sqlSpan = sqlSpan[1..];
-                continue;
-            }
-            sqlBuilder.Append($"@p{parameterIndex}");
-            sqlSpan = sqlSpan[(2 + parameterIndex.ToString().Length)..];
-            parameterIndex++;
-        }
-
-        return sqlBuilder.ToString();
-    }
-
-    internal static DbParameter[] GetSqlCommandParameters(this FormattableString sql)
-    {
-        object?[] args = sql.GetArguments();
-        DbParameter[] parameters = new DbParameter[args.Length];
-        for (int i = 0; i < args.Length; i++)
-        {
-            parameters[i] = new($"@p{i}", args[i] ?? DBNull.Value);
-        }
-        return parameters;
-    }
-
-    private static async Task<TResult> RunCommandAsync<TResult>(this DatabaseFacade database, Func<DbCommand, Task<TResult>> commandAction)
-    {
-        using var command = CreateCommand(database);
+        await using var command = CreateCommand(database);
         if (database.CurrentTransaction is not null)
         {
-            return await commandAction(command);
+            return await commandAction((database, command, state));
         }
         else
         {
-            Task<TResult> lambdaAction() => commandAction(command);
-            return await database.CreateExecutionStrategy().ExecuteAsync(lambdaAction);
+            return await database.CreateExecutionStrategy().ExecuteAsync((database, command, state), commandAction);
         }
     }
 }

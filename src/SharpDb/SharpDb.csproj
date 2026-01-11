@@ -1,13 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0</TargetFrameworks>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>8.0.0</Version>
+    <Version>8.1.0</Version>
     <PackageId>SharpDb.Core</PackageId>
     <Description>Library providing core utilities for working with databases</Description>
     <Authors>Jan Martinek</Authors>
@@ -21,6 +21,11 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReleaseNotes>
+      [8.1.0] - 2026-01-11
+      - IUnitOfWork is now disposable
+      - IUnitOfWork no longer contains Attach/Detach methods
+      - IRepository now contains Attach/Detach methods
+      - IDbError implementations now as classes instead of structs
     </PackageReleaseNotes>
   </PropertyGroup>
 

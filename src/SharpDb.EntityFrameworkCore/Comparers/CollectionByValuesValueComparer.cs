@@ -9,15 +9,11 @@ namespace SharpDb.EntityFrameworkCore.Comparers;
 /// you know that the collection may change its contents, but not its reference.
 /// </summary>
 /// <typeparam name="T">Type of collection items</typeparam>
-public sealed class CollectionByValuesValueComparer<T> : ValueComparer<ICollection<T>>
+public sealed class CollectionByValuesValueComparer<T>() : ValueComparer<ICollection<T>>(
+    equalsExpression: (a, b) => EqualsByValues(a, b),
+    hashCodeExpression: obj => GetHashCodeByValues(obj),
+    snapshotExpression: obj => obj.ToImmutableArray())
 {
-    public CollectionByValuesValueComparer() : base(
-        equalsExpression: (a, b) => EqualsByValues(a, b),
-        hashCodeExpression: obj => GetHashCodeByValues(obj),
-        snapshotExpression: obj => obj.ToImmutableArray())
-    {
-    }
-
     private static bool EqualsByValues(ICollection<T>? a, ICollection<T>? b)
     {
         if (ReferenceEquals(a, b)) return true;

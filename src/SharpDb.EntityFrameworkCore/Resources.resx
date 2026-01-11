@@ -141,4 +141,7 @@
   <data name="Text.Error.TypeInstantiationFailed" xml:space="preserve">
     <value>Type `{0}` could not be constructed.</value>
   </data>
+  <data name="Text.Error.Repository.AttachNotSupported" xml:space="preserve">
+    <value>The `{0}` repository ({1}) does not support `Attach` operation - IsUpdateEnabled == false.</value>
+  </data>
 </root>
