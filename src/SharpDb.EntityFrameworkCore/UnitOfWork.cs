@@ -14,8 +14,6 @@ namespace SharpDb.EntityFrameworkCore;
 /// <param name="dbContextFactory">Database context factory used to create a new owned context</param>
 public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContextFactory) : IUnitOfWork where TContext : DbContext
 {
-    protected readonly TContext DbContext = dbContextFactory.CreateDbContext();
-
     private readonly Dictionary<int, object> _loadedRepositories = new(3);
     private readonly object _loadedRepositoriesLock = new();
     private SqlRunner? _sql;
@@ -31,6 +29,11 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     /// on the underlying database.
     /// </summary>
     public SqlRunner Sql => _sql ??= new SqlRunner(DbContext.Database);
+
+    /// <summary>
+    /// This property can be used to access the underlying database context.
+    /// </summary>
+    protected TContext DbContext { get; } = dbContextFactory.CreateDbContext();
 
     public int SaveChanges()
     {
