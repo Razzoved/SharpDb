@@ -22,7 +22,7 @@ public sealed class TrackSaveUserInterceptor(IUserService userService) : SaveCha
 {
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
-        if (eventData.Context is not null && eventData.Context.ChangeTracker.HasChanges() && userService.GetCurrentUser() is IUser user)
+        if (eventData.Context is not null && eventData.Context.ChangeTracker.HasChanges() && userService.GetCurrentUser() is { } user)
         {
             // Handle inserted objects
             foreach (var entry in eventData.Context.ChangeTracker.Entries<ITrackUserC>())
@@ -49,7 +49,7 @@ public sealed class TrackSaveUserInterceptor(IUserService userService) : SaveCha
             // Handle deleted objects
             foreach (var entry in eventData.Context.ChangeTracker.Entries<ITrackUserD>())
             {
-                if (entry.State == EntityState.Deleted || (entry.State == EntityState.Modified && entry.Entity.IsDeleted))
+                if (entry.State == EntityState.Deleted || entry is { State: EntityState.Modified, Entity.IsDeleted: true })
                 {
                     if (entry.Entity.DeletedByUser is null)
                     {
