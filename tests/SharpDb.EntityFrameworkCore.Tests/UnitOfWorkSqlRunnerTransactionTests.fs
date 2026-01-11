@@ -22,7 +22,7 @@ module UnitOfWorkSqlRunnerTransactionTests =
 
     type DummyUnitOfWork(ctxFactory: IDbContextFactory<DummyDbContext>) =
         inherit UnitOfWork<DummyDbContext>(ctxFactory)
-        member this.PrivateContext = this.GetContext()
+        member this.PrivateContext = this.DbContext
 
     type SqliteContextFactory() =
         let connection = new SqliteConnection($"Data Source={Guid.NewGuid()};mode=memory;cache=shared;")
