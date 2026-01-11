@@ -11,7 +11,7 @@ public sealed class SqlRunner : ISqlRunner
 
     public SqlRunner(DatabaseFacade db)
     {
-        ArgumentNullException.ThrowIfNull(db, nameof(db));
+        ArgumentNullException.ThrowIfNull(db);
         _db = db;
         _connectionInfo = null;
     }
@@ -38,10 +38,16 @@ public sealed class SqlRunner : ISqlRunner
     public ValueTask<DbQueryResult<T>> RawSingleAsync<T>(string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
         => _db.RawSqlSingleAsync(sql, reader, parameters);
 
-    public ValueTask<DbQueryResult<T[]>> ManyAsync<T>(FormattableString sql, Func<DbDataReader, T> reader)
+    public ValueTask<DbQueryResult<T?>> FirstOrDefaultAsync<T>(FormattableString sql, Func<DbDataReader, T> reader)
+        => _db.SqlFirstOrDefaultAsync(sql, reader);
+
+    public ValueTask<DbQueryResult<T?>> RawFirstOrDefaultAsync<T>(string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+        => _db.RawSqlFirstOrDefaultAsync(sql, reader, parameters);
+
+    public ValueTask<DbQueryResult<IReadOnlyList<T>>> ManyAsync<T>(FormattableString sql, Func<DbDataReader, T> reader)
         => _db.SqlManyAsync(sql, reader);
 
-    public ValueTask<DbQueryResult<T[]>> RawManyAsync<T>(string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    public ValueTask<DbQueryResult<IReadOnlyList<T>>> RawManyAsync<T>(string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
         => _db.RawSqlManyAsync(sql, reader, parameters);
 
     public ValueTask<DbExecResult> ExecuteAsync(FormattableString sql)
@@ -53,7 +59,10 @@ public sealed class SqlRunner : ISqlRunner
     public ValueTask<DbQueryResult<T>> StoredProcedureSingleAsync<T>(string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
         => _db.StoredProcedureSingleAsync(procedureName, reader, parameters);
 
-    public ValueTask<DbQueryResult<T[]>> StoredProcedureManyAsync<T>(string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    public ValueTask<DbQueryResult<T?>> StoredProcedureFirstOrDefaultAsync<T>(string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+        => _db.StoredProcedureFirstOrDefaultAsync(procedureName, reader, parameters);
+
+    public ValueTask<DbQueryResult<IReadOnlyList<T>>> StoredProcedureManyAsync<T>(string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
         => _db.StoredProcedureManyAsync(procedureName, reader, parameters);
 
     public ValueTask<DbExecResult> StoredProcedureExecuteAsync(string procedureName, params DbParameter[] parameters)

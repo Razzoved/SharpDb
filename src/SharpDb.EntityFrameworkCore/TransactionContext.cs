@@ -1,60 +1,89 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Runtime.CompilerServices;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace SharpDb.EntityFrameworkCore;
 
 internal sealed class TransactionContext : IDisposable
 {
-    private static readonly AsyncLocal<IDbContextTransaction?> s_transaction = new();
-    private static readonly AsyncLocal<ChangeJournal?> s_changeJournal = new();
-    private static readonly AsyncLocal<UIntBox> s_affectedRows = new();
-    private readonly IDbContextTransaction? _savedTransaction;
-    private readonly ChangeJournal? _savedChangeJournal;
-    private readonly uint _savedAffectedRows;
+    private static readonly ConditionalWeakTable<IDbContextTransaction, AsyncLocal<ModifiableValue>> s_contexts = new();
+
+    private readonly IDbContextTransaction _transaction;
+    private readonly TransactionContext? _previous;
     private bool _disposed;
 
-    public TransactionContext(DbContext context)
+    public TransactionContext(DbContext dbContext)
     {
-        ArgumentNullException.ThrowIfNull(context, nameof(context));
-        ArgumentNullException.ThrowIfNull(context.Database.CurrentTransaction, nameof(context));
-        s_affectedRows.Value ??= new UIntBox();
-        _savedTransaction = s_transaction.Value;
-        _savedChangeJournal = s_changeJournal.Value;
-        _savedAffectedRows = s_affectedRows.Value.BoxedValue;
-        s_changeJournal.Value?.Stop();
-        s_changeJournal.Value = new ChangeJournal(context);
-        s_changeJournal.Value.Start();
-        s_transaction.Value = context.Database.CurrentTransaction;
+        ArgumentNullException.ThrowIfNull(dbContext);
+        ArgumentNullException.ThrowIfNull(dbContext.Database.CurrentTransaction, nameof(dbContext));
+
+        _transaction = dbContext.Database.CurrentTransaction;
+
+        var local = s_contexts.GetOrCreateValue(_transaction);
+        local.Value ??= new ModifiableValue();
+
+        _previous = local.Value.Context;
+        ChangeJournal = new ChangeJournal(dbContext);
+        _previous?.ChangeJournal.Stop();
+        ChangeJournal.Start();
+
+        local.Value.Context = this;
     }
 
-    public static IDbContextTransaction? Transaction => s_transaction.Value;
-    public static ChangeJournal? ChangeJournal => s_changeJournal.Value;
-    public static uint AffectedRows => s_affectedRows.Value?.BoxedValue ?? 0;
+    public ChangeJournal ChangeJournal { get; }
+    public uint AffectedRows { get; private set; }
 
-    public static void AddAffectedRows(uint count)
+    public static TransactionContext? GetCurrent(DatabaseFacade facade)
     {
-        if (s_affectedRows.Value is not null)
-            s_affectedRows.Value.BoxedValue += count;
+        return facade.CurrentTransaction is null
+               || !s_contexts.TryGetValue(facade.CurrentTransaction, out var local)
+               || local.Value is null
+            ? null
+            : local.Value.Context;
+    }
+
+    public void AddAffectedRows(uint count)
+    {
+        AffectedRows += count;
     }
 
     public void Rollback()
     {
-        s_changeJournal.Value?.Restore();
-        if (s_affectedRows.Value is not null)
-            s_affectedRows.Value.BoxedValue = _savedAffectedRows;
+        ChangeJournal.Restore();
+        AffectedRows = 0;
     }
 
     public void Dispose()
     {
-        if (!_disposed)
+        if (_disposed) return;
+
+        _disposed = true;
+        ChangeJournal.Stop();
+
+        if (s_contexts.TryGetValue(_transaction, out var local) && local.Value is not null)
         {
-            _disposed = true;
-            s_transaction.Value = _savedTransaction;
-            s_changeJournal.Value?.Stop();
-            s_changeJournal.Value = _savedChangeJournal;
-            s_changeJournal.Value?.Start();
+            if (_previous is not null)
+            {
+                _previous.ChangeJournal.Start();
+                _previous.AffectedRows += AffectedRows;
+            }
+            local.Value.Context = _previous;
         }
     }
 
-    private sealed class UIntBox { public uint BoxedValue; }
+    public override int GetHashCode()
+    {
+        return _transaction.GetHashCode();
+    }
+
+    public override bool Equals(object? obj)
+    {
+        return obj is TransactionContext other && _transaction.Equals(other._transaction);
+    }
+
+    private sealed class ModifiableValue
+    {
+        public TransactionContext? Context { get; set; }
+    }
 }
