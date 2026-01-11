@@ -3,9 +3,9 @@
 public interface ISqlRunner
 {
     /// <summary>
-    /// Retrives information about the underlying database.
-    /// Useful for raw sql operations.
+    /// Retrieves information about the underlying database.
+    /// Useful for raw SQL operations.
     /// </summary>
-    /// <returns>Info object or null if not available</returns>
-    DbConnectionInfo? GetConnectionInfo();
+    /// <returns>Info object</returns>
+    DbConnectionInfo GetConnectionInfo();
 }

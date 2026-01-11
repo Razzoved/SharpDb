@@ -16,16 +16,20 @@ public sealed class SqlRunner : ISqlRunner
         _connectionInfo = null;
     }
 
-    public DbConnectionInfo? GetConnectionInfo()
+    public DbConnectionInfo GetConnectionInfo()
     {
-        if (_connectionInfo is null)
+        if (!_connectionInfo.HasValue)
         {
-            if (_db.GetConnectionString() is string connectionString)
+            if (_db.GetConnectionString() is { } connectionString)
             {
                 _connectionInfo = DbConnectionInfo.FromConnectionString(connectionString);
             }
+            else
+            {
+                _connectionInfo = DbConnectionInfo.FromConnectionString("");
+            }
         }
-        return _connectionInfo;
+        return _connectionInfo.Value;
     }
 
     public ValueTask<DbQueryResult<T>> SingleAsync<T>(FormattableString sql, Func<DbDataReader, T> reader)
