@@ -3,18 +3,12 @@ using SharpDb.Cryptography;
 
 namespace SharpDb.EntityFrameworkCore.Converters;
 
-public sealed class BinaryToBinaryAesEncryptConverter<TModel, TProvider> : ValueConverter<TModel, TProvider>
-
+public sealed class BinaryToBinaryAesEncryptConverter<TModel, TProvider>(byte[] secret) : ValueConverter<TModel, TProvider>(
+    v => Encrypt(v, secret),
+    v => Decrypt(v, secret))
     where TModel : ICollection<byte>, new()
     where TProvider : ICollection<byte>, new()
 {
-    public BinaryToBinaryAesEncryptConverter(byte[] secret)
-        : base(
-            v => Encrypt(v, secret),
-            v => Decrypt(v, secret))
-    {
-    }
-
     public static TProvider Encrypt(TModel bytes, byte[] secret)
     {
         if (bytes is not byte[] bytesArray)

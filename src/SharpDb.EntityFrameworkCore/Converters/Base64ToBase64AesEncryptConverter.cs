@@ -3,15 +3,10 @@ using SharpDb.Cryptography;
 
 namespace SharpDb.EntityFrameworkCore.Converters;
 
-public sealed class Base64ToBase64AesEncryptConverter : ValueConverter<string, string>
+public sealed class Base64ToBase64AesEncryptConverter(byte[] secret) : ValueConverter<string, string>(
+    v => Encrypt(v, secret),
+    v => Decrypt(v, secret))
 {
-    public Base64ToBase64AesEncryptConverter(byte[] secret)
-        : base(
-            v => Encrypt(v, secret),
-            v => Decrypt(v, secret))
-    {
-    }
-
     public static string Encrypt(string plainText, byte[] secret)
     {
         byte[] bytes = Convert.FromBase64String(plainText);
