@@ -3,7 +3,6 @@ namespace SharpDb.EntityFrameworkCore.Tests
 open System
 open System.Reflection
 open Microsoft.EntityFrameworkCore
-open Microsoft.EntityFrameworkCore.Metadata
 open Xunit
 open SharpDb.EntityFrameworkCore
 open Microsoft.EntityFrameworkCore.Metadata.Builders
@@ -14,7 +13,7 @@ module ModelBuilderExtensionsTests =
         member val Id = 0 with get, set
         member val Name = "" with get, set
 
-    [<KeylessAttribute>]
+    [<Keyless>]
     type Child() =
         member val Id = 0 with get, set
         member val ParentId = 0 with get, set
@@ -25,7 +24,7 @@ module ModelBuilderExtensionsTests =
         member val ChildId = 0 with get, set
         member val Child : Child | null = null with get, set
 
-    [<KeylessAttribute>]
+    [<Keyless>]
     type CycleB() =
         member val Id = 0 with get, set
         member val CycleBId = 0 with get, set
