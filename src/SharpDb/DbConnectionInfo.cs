@@ -32,12 +32,12 @@ public readonly struct DbConnectionInfo
 
     private static string GetServerName(in DbConnectionStringBuilder csBuilder)
     {
-        return GetValueCaseAndSpaceInsensitive(csBuilder, "Data Source", "Server", "Address");
+        return GetValueCaseAndSpaceInsensitive(csBuilder, "Data Source;Server;Address");
     }
 
     private static string GetDatabaseName(in DbConnectionStringBuilder csBuilder)
     {
-        return GetValueCaseAndSpaceInsensitive(csBuilder, "Initial Catalog", "Database");
+        return GetValueCaseAndSpaceInsensitive(csBuilder, "Initial Catalog;Database");
     }
 
     private static string GetTablePrefix(in string serverName, in string databaseName)
@@ -64,26 +64,22 @@ public readonly struct DbConnectionInfo
         return tablePrefixBuilder.ToString();
     }
 
-    private static string GetValueCaseAndSpaceInsensitive(in DbConnectionStringBuilder csBuilder, string key, params string[] synonyms)
+    private static string GetValueCaseAndSpaceInsensitive(in DbConnectionStringBuilder csBuilder, ReadOnlySpan<char> keyAndSynonyms)
     {
-        static string TrimWhitespaceAndToLower(string value)
+        Dictionary<string, string> builderKeys = csBuilder.Keys.Cast<string>().ToDictionary(x => x.Trim(), StringComparer.OrdinalIgnoreCase);
+        while (!keyAndSynonyms.IsEmpty)
         {
-            StringBuilder valueBuilder = new(value.Length);
-            for (int i = 0; i < value.Length; i++)
-            {
-                if (!char.IsWhiteSpace(value[i]))
-                {
-                    valueBuilder.Append(char.ToLowerInvariant(value[i]));
-                }
-            }
-            return valueBuilder.ToString();
-        }
-
-        Dictionary<string, string> builderKeys = csBuilder.Keys.Cast<string>().ToDictionary(TrimWhitespaceAndToLower);
-        for (int i = -1; i < synonyms.Length; i++)
-        {
-            string currentKey = TrimWhitespaceAndToLower(i >= 0 ? synonyms[i] : key);
-            if (!builderKeys.TryGetValue(currentKey, out string? actualKey))
+            int separatorIndex = keyAndSynonyms.IndexOf(';');
+            ReadOnlySpan<char> currentKey = separatorIndex == -1
+                ? keyAndSynonyms
+                : keyAndSynonyms[..separatorIndex];
+            keyAndSynonyms = currentKey.Length + 1 >= keyAndSynonyms.Length
+                ? ReadOnlySpan<char>.Empty
+                : keyAndSynonyms[(currentKey.Length + 1)..];
+            currentKey = currentKey.Trim();
+            if (currentKey.Length == 0)
+                continue;
+            if (!builderKeys.TryGetValue(currentKey.ToString(), out string? actualKey))
                 continue;
             if (!csBuilder.TryGetValue(actualKey, out object? actualValue))
                 continue;
