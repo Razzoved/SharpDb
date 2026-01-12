@@ -1,5 +1,6 @@
 ﻿using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using SharpDb.EntityFrameworkCore.Extensions;
 
 namespace SharpDb.EntityFrameworkCore.Repositories;
 
@@ -17,7 +18,7 @@ public sealed class DefaultRepository<TEntity>(DbContext context) : Repository<T
         {
             IQueryable<TEntity> query = apply is null ? Set : apply(Set);
             if (query is not IOrderedQueryable<TEntity>)
-                query = query.Order();
+                query = query.OrderByDefault(Set);
             return DbQueryResult<TEntity?>.Success(await query.FirstOrDefaultAsync(expression));
         }
         catch (Exception e)
@@ -32,7 +33,7 @@ public sealed class DefaultRepository<TEntity>(DbContext context) : Repository<T
         {
             IQueryable<TEntity> query = apply is null ? Set : apply(Set);
             if (query is not IOrderedQueryable<TEntity>)
-                query = query.Order();
+                query = query.OrderByDefault(Set);
             if (expression is not null)
                 query = query.Where(expression);
             return DbQueryResult<TEntity[]>.Success(await query.ToArrayAsync());
@@ -49,7 +50,7 @@ public sealed class DefaultRepository<TEntity>(DbContext context) : Repository<T
         {
             IQueryable<TEntity> query = apply is null ? Set : apply(Set);
             if (query is not IOrderedQueryable<TEntity>)
-                query = query.Order();
+                query = query.OrderByDefault(Set);
             if (expression is not null)
                 query = query.Where(expression);
             return DbQueryResult<List<TEntity>>.Success(await query.ToListAsync());
