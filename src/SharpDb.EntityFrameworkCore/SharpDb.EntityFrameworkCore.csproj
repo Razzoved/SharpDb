@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>8.1.1</Version>
+    <Version>8.1.2</Version>
     <Description>Library providing utilities/extensions for Microsoft.EntityFrameworkCore</Description>
     <Authors>Jan Martinek</Authors>
     <Keyword>sharpdb lib database data efc</Keyword>
@@ -20,6 +20,8 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReleaseNotes>
+      [8.1.2] - 2026-02-09
+      - Added overloads for InTransaction and InTransactionAsync for return by value
       [8.1.1] - 2026-02-12
       - Added additional converters for datetime types
       - Added extensions for autoresolved query ordering
