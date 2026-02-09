@@ -74,7 +74,7 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     /// is nested inside an active transaction and the exception itself is caused by transient error.
     /// </remarks>
     /// <exception cref="DbException">When transient error occurs in a nested call</exception>
-    public DbTransactionResult InTransaction(Action action)
+    public DbTransactionResult InTransaction(Func<ActionState> action)
     {
         if (DbContext.Database.CurrentTransaction is { } transaction)
         {
@@ -85,7 +85,13 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
                 using var transactionContext = new TransactionContext(DbContext);
                 try
                 {
-                    action();
+                    var state = action();
+                    if (state.IsAborted)
+                    {
+                        transaction.RollbackToSavepoint(savepoint);
+                        transactionContext.Rollback();
+                        return DbTransactionResult.Failure(state.Error);
+                    }
                     return DbTransactionResult.Success(transactionContext.AffectedRows);
                 }
                 catch (Exception e)
@@ -102,7 +108,11 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             }
             else
             {
-                action();
+                var state = action();
+                if (state.IsAborted)
+                {
+                    return DbTransactionResult.Failure(state.Error);
+                }
                 uint affectedRows = TransactionContext.GetCurrent(DbContext.Database)?.AffectedRows ?? 0;
                 return DbTransactionResult.Success(affectedRows);
             }
@@ -112,13 +122,20 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             var strategy = DbContext.Database.CreateExecutionStrategy();
             try
             {
-                uint affectedRows = strategy.Execute((DbContext, action), state =>
+                uint affectedRows = strategy.Execute((DbContext, action), actionContext =>
                 {
-                    using var newTransaction = state.DbContext.Database.BeginTransaction();
-                    using var newTransactionContext = new TransactionContext(state.DbContext);
+                    using var newTransaction = actionContext.DbContext.Database.BeginTransaction();
+                    using var newTransactionContext = new TransactionContext(actionContext.DbContext);
                     try
                     {
-                        state.action();
+                        var state = actionContext.action();
+                        if (state.IsAborted)
+                        {
+                            var exception = state.Error is ExceptionDbError { Exception: not null } exError
+                                ? exError.Exception
+                                : new InvalidOperationException(state.Error.Message);
+                            throw exception;
+                        }
                         newTransaction.Commit();
                         return newTransactionContext.AffectedRows;
                     }
@@ -145,7 +162,20 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     /// is nested inside an active transaction and the exception itself is caused by transient error.
     /// </remarks>
     /// <exception cref="DbException">When transient error occurs in a nested call</exception>
-    public async ValueTask<DbTransactionResult> InTransactionAsync(Func<Task> action)
+    public DbTransactionResult InTransaction(Action action) => InTransaction(() =>
+    {
+        action();
+        return ActionState.Complete();
+    });
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Take care when using any non-efc logic, such as adding to lists, since the operations might be
+    /// repeated several times when the transaction is retried. Throws an exception if the call
+    /// is nested inside an active transaction and the exception itself is caused by transient error.
+    /// </remarks>
+    /// <exception cref="DbException">When transient error occurs in a nested call</exception>
+    public async ValueTask<DbTransactionResult> InTransactionAsync(Func<Task<ActionState>> asyncAction)
     {
         if (DbContext.Database.CurrentTransaction is { } transaction)
         {
@@ -156,7 +186,13 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
                 using var transactionContext = new TransactionContext(DbContext);
                 try
                 {
-                    await action();
+                    var state = await asyncAction();
+                    if (state.IsAborted)
+                    {
+                        await transaction.RollbackToSavepointAsync(savepoint);
+                        transactionContext.Rollback();
+                        return DbTransactionResult.Failure(state.Error);
+                    }
                     return DbTransactionResult.Success(transactionContext.AffectedRows);
                 }
                 catch (Exception e)
@@ -173,7 +209,11 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             }
             else
             {
-                await action();
+                var state = await asyncAction();
+                if (state.IsAborted)
+                {
+                    return DbTransactionResult.Failure(state.Error);
+                }
                 uint affectedRows = TransactionContext.GetCurrent(DbContext.Database)?.AffectedRows ?? 0;
                 return DbTransactionResult.Success(affectedRows);
             }
@@ -183,13 +223,20 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             var strategy = DbContext.Database.CreateExecutionStrategy();
             try
             {
-                uint affectedRows = await strategy.ExecuteAsync((DbContext, action), async state =>
+                uint affectedRows = await strategy.ExecuteAsync((DbContext, asyncAction), async actionContext =>
                 {
-                    await using var newTransaction = await state.DbContext.Database.BeginTransactionAsync();
-                    using var newTransactionContext = new TransactionContext(state.DbContext);
+                    await using var newTransaction = await actionContext.DbContext.Database.BeginTransactionAsync();
+                    using var newTransactionContext = new TransactionContext(actionContext.DbContext);
                     try
                     {
-                        await state.action();
+                        var state = await actionContext.asyncAction();
+                        if (state.IsAborted)
+                        {
+                            var exception = state.Error is ExceptionDbError { Exception: not null } exError
+                                ? exError.Exception
+                                : new InvalidOperationException(state.Error.Message);
+                            throw exception;
+                        }
                         await newTransaction.CommitAsync();
                         return newTransactionContext.AffectedRows;
                     }
@@ -208,6 +255,19 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             }
         }
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Take care when using any non-efc logic, such as adding to lists, since the operations might be
+    /// repeated several times when the transaction is retried. Throws an exception if the call
+    /// is nested inside an active transaction and the exception itself is caused by transient error.
+    /// </remarks>
+    /// <exception cref="DbException">When transient error occurs in a nested call</exception>
+    public ValueTask<DbTransactionResult> InTransactionAsync(Func<Task> asyncAction) => InTransactionAsync(async () =>
+    {
+        await asyncAction();
+        return ActionState.Complete();
+    });
 
     public void Dispose()
     {

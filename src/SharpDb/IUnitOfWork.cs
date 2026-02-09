@@ -36,6 +36,15 @@ public interface IUnitOfWork : IDisposable
     DbTransactionResult InTransaction(Action action);
 
     /// <summary>
+    /// Runs the specified action as a single transaction.
+    /// The implementation must:
+    /// <br/>- prevent all exceptions
+    /// <br/>- allow nested calls
+    /// </summary>
+    /// <param name="action">Action to be run with explicit result</param>
+    DbTransactionResult InTransaction(Func<ActionState> action);
+
+    /// <summary>
     /// Runs the specified action in a single asynchronous transaction.
     /// The implementation must:
     /// <br/>- prevent all exceptions
@@ -44,4 +53,14 @@ public interface IUnitOfWork : IDisposable
     /// <param name="asyncAction">Action to be run</param>
     /// <returns>Awaitable transaction task</returns>
     ValueTask<DbTransactionResult> InTransactionAsync(Func<Task> asyncAction);
+
+    /// <summary>
+    /// Runs the specified action in a single asynchronous transaction.
+    /// The implementation must:
+    /// <br/>- prevent all exceptions
+    /// <br/>- allow nested calls
+    /// </summary>
+    /// <param name="asyncAction">Action to be run with explicit result</param>
+    /// <returns>Awaitable transaction task</returns>
+    ValueTask<DbTransactionResult> InTransactionAsync(Func<Task<ActionState>> asyncAction);
 }
