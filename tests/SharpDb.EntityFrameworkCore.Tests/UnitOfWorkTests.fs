@@ -1,13 +1,14 @@
 ﻿namespace SharpDb.EntityFrameworkCore.Tests
 
+open Microsoft.Data.Sqlite
+open Microsoft.EntityFrameworkCore
+open SharpDb;
 open SharpDb.EntityFrameworkCore
+open SharpDb.EntityFrameworkCore.Repositories
 open System
 open System.Reflection
 open System.Threading.Tasks
-open Microsoft.Data.Sqlite
-open Microsoft.EntityFrameworkCore
 open Xunit
-open SharpDb.EntityFrameworkCore.Repositories
 
 module UnitOfWorkTests =
 
@@ -145,6 +146,7 @@ module UnitOfWorkTests =
             let! result = uow.InTransactionAsync(fun () -> task {
                 uow.Repository.Add(entity) |> ignore
                 uow.SaveChangesAsync() |> ignore
+                return ActionState.Complete()
             })
             Assert.True(result.IsSuccess)
             Assert.True(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
@@ -348,3 +350,201 @@ module UnitOfWorkTests =
         Assert.Equal(transactionId1, transactionId2)
         Assert.Equal(transactionId1, transactionId3)
 
+    [<Fact>]
+    let ``InTransaction with ActionState executes action and returns success`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+        let entity = DummyEntity()
+        entity.Name <- "Test"
+        Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+        let result = uow.InTransaction(fun () ->
+            uow.Repository.Add(entity) |> ignore
+            uow.SaveChanges() |> ignore
+            ActionState.Complete()
+        )
+        Assert.True(result.IsSuccess)
+        Assert.True(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+
+    [<Fact>]
+    let ``InTransaction with ActionState aborts early on validation failure`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+        let entity = DummyEntity()
+        entity.Name <- "Test"
+        let result = uow.InTransaction(fun () ->
+            uow.Repository.Add(entity) |> ignore
+            uow.SaveChanges() |> ignore
+            if entity.Name = "Test" then
+                ActionState.Abort("Validation failed: Name cannot be 'Test'")
+            else
+                entity.Name <- "Test2"
+                uow.Repository.Update(entity) |> ignore
+                uow.SaveChanges() |> ignore
+                ActionState.Complete()
+        )
+        Assert.False(result.IsSuccess)
+        Assert.Contains("Validation failed: Name cannot be 'Test'", result.Error.Message)
+        Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+
+    [<Fact>]
+    let ``InTransaction with ActionState aborts with custom error`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+        let entity = DummyEntity()
+        entity.Name <- "Test"
+        let result = uow.InTransaction(fun () ->
+            uow.Repository.Add(entity) |> ignore
+            uow.SaveChanges() |> ignore
+            ActionState.Abort(StringDbError("Custom error message"))
+        )
+        Assert.False(result.IsSuccess)
+        Assert.Equal("Custom error message", result.Error.Message)
+        Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+
+    [<Fact>]
+    let ``InTransaction with ActionState tracks affected rows on success`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+        let entity1 = DummyEntity()
+        entity1.Name <- "Test1"
+        let entity2 = DummyEntity()
+        entity2.Name <- "Test2"
+        let result = uow.InTransaction(fun () ->
+            uow.Repository.Add(entity1) |> ignore
+            uow.Repository.Add(entity2) |> ignore
+            uow.SaveChanges() |> ignore
+            ActionState.Complete()
+        )
+        Assert.True(result.IsSuccess)
+        Assert.Equal<int64>(2L, result.AffectedRows)
+
+    [<Fact>]
+    let ``InTransaction with ActionState still rolls back on exception`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+        let entity = DummyEntity()
+        entity.Name <- "Test"
+        let result = uow.InTransaction(fun () ->
+            uow.Repository.Add(entity) |> ignore
+            uow.SaveChanges() |> ignore
+            raise (Exception("Unexpected exception"))
+            ActionState.Complete()
+        )
+        Assert.False(result.IsSuccess)
+        Assert.Contains("Unexpected exception", result.Error.Message)
+        Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+
+    [<Fact>]
+    let ``InTransactionAsync with ActionState executes action and returns success`` () : Task =
+        task {
+            use dbContextFactory = new SqliteContextFactory()
+            use uow = new DummyUnitOfWork(dbContextFactory)
+            let entity = DummyEntity()
+            entity.Name <- "Test"
+            Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+            let! result = uow.InTransactionAsync(fun () -> task {
+                uow.Repository.Add(entity) |> ignore
+                let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
+                return ActionState.Complete()
+            })
+            Assert.True(result.IsSuccess)
+            Assert.True(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+        }
+
+    [<Fact>]
+    let ``InTransactionAsync with ActionState aborts early on validation failure`` () : Task =
+        task {
+            use dbContextFactory = new SqliteContextFactory()
+            use uow = new DummyUnitOfWork(dbContextFactory)
+            let entity = DummyEntity()
+            entity.Name <- "Test"
+            let! result = uow.InTransactionAsync(fun () -> task {
+                uow.Repository.Add(entity) |> ignore
+                let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
+                if entity.Name = "Test" then
+                    return ActionState.Abort("Async validation failed")
+                else
+                    entity.Name <- "Test2"
+                    uow.Repository.Update(entity) |> ignore
+                    let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
+                    return ActionState.Complete()
+            })
+            Assert.False(result.IsSuccess)
+            Assert.Contains("Async validation failed", result.Error.Message)
+            Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+        }
+
+    [<Fact>]
+    let ``InTransactionAsync with ActionState tracks affected rows on success`` () : Task =
+        task {
+            use dbContextFactory = new SqliteContextFactory()
+            use uow = new DummyUnitOfWork(dbContextFactory)
+            let entity1 = DummyEntity()
+            entity1.Name <- "Test1"
+            let entity2 = DummyEntity()
+            entity2.Name <- "Test2"
+            let! result = uow.InTransactionAsync(fun () -> task {
+                uow.Repository.Add(entity1) |> ignore
+                uow.Repository.Add(entity2) |> ignore
+                let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
+                return ActionState.Complete()
+            })
+            Assert.True(result.IsSuccess)
+            Assert.Equal<int64>(2L, result.AffectedRows)
+        }
+
+    [<Fact>]
+    let ``InTransactionAsync with ActionState still rolls back on exception`` () : Task =
+        task {
+            use dbContextFactory = new SqliteContextFactory()
+            use uow = new DummyUnitOfWork(dbContextFactory)
+            let entity = DummyEntity()
+            entity.Name <- "Test"
+            let! result = uow.InTransactionAsync(fun () -> task {
+                uow.Repository.Add(entity) |> ignore
+                let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
+                raise (Exception("Async unexpected exception"))
+                return ActionState.Complete()
+            })
+            Assert.False(result.IsSuccess)
+            Assert.Contains("Async unexpected exception", result.Error.Message)
+            Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+        }
+
+    [<Fact>]
+    let ``InTransaction with ActionState can abort after partial work`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+        let entity1 = DummyEntity()
+        entity1.Name <- "Test1"
+        let entity2 = DummyEntity()
+        entity2.Name <- "Test2"
+        let result = uow.InTransaction(fun () ->
+            uow.Repository.Add(entity1) |> ignore
+            uow.SaveChanges() |> ignore
+            // Abort after first save
+            ActionState.Abort(StringDbError("Aborting after partial work"))
+        )
+        Assert.False(result.IsSuccess)
+        // Both entities should be rolled back
+        Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = "Test1") |> Async.AwaitTask |> Async.RunSynchronously)
+        Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = "Test2") |> Async.AwaitTask |> Async.RunSynchronously)
+
+    [<Fact>]
+    let ``Nested InTransaction with ActionState outer succeeds inner aborts`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+        let result = uow.InTransaction(fun () ->
+            uow.Repository.Add(DummyEntity(Name = "Outer")) |> ignore
+            uow.SaveChanges() |> ignore
+            let innerResult = uow.InTransaction(fun () ->
+                uow.Repository.Add(DummyEntity(Name = "Inner")) |> ignore
+                uow.SaveChanges() |> ignore
+                ActionState.Abort(StringDbError("Inner aborted"))
+            )
+            Assert.False(innerResult.IsSuccess)
+            ActionState.Complete()
+        )
+        Assert.True(result.IsSuccess)
+        Assert.True(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = "Outer") |> Async.AwaitTask |> Async.RunSynchronously)
+        Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = "Inner") |> Async.AwaitTask |> Async.RunSynchronously)

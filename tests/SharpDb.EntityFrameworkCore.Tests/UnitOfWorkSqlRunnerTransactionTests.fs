@@ -1,11 +1,12 @@
 namespace SharpDb.EntityFrameworkCore.Tests
 
-open System
 open Microsoft.Data.Sqlite
 open Microsoft.EntityFrameworkCore
-open Xunit
+open SharpDb
 open SharpDb.EntityFrameworkCore
+open System
 open System.Reflection
+open Xunit
 
 module UnitOfWorkSqlRunnerTransactionTests =
 
@@ -54,6 +55,7 @@ module UnitOfWorkSqlRunnerTransactionTests =
                     let r3 = uow.Sql.ManyAsync<DummyEntity>($"""SELECT * FROM DummyEntity WHERE Name = {name}""", fun r -> new DummyEntity()).AsTask() |> Async.AwaitTask
                     ignore r2
                     ignore r3
+                    return ActionState.Complete()
                 }
             )
             Assert.True(result.IsSuccess)
