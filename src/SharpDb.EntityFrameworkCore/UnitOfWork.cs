@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.EntityFrameworkCore;
+using SharpDb.Exceptions;
 
 namespace SharpDb.EntityFrameworkCore;
 
@@ -96,14 +97,21 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
                 }
                 catch (Exception e)
                 {
-                    transaction.RollbackToSavepoint(savepoint);
+                    try
+                    {
+                        transaction.RollbackToSavepoint(savepoint);
+                    }
+                    catch (Exception rollbackEx)
+                    {
+                        e = new DbRollbackException(e.Message, rollbackEx);
+                    }
                     transactionContext.Rollback();
-                    if (e is DbException { IsTransient: true }) throw;
+                    if (e is DbException { IsTransient: true } or DbRollbackException) throw e;
                     return DbTransactionResult.Failure(new ExceptionDbError(e));
                 }
                 finally
                 {
-                    transaction.ReleaseSavepoint(savepoint);
+                    try { transaction.ReleaseSavepoint(savepoint); } catch { }
                 }
             }
             else
@@ -139,11 +147,18 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
                         newTransaction.Commit();
                         return newTransactionContext.AffectedRows;
                     }
-                    catch
+                    catch (Exception e)
                     {
-                        newTransaction.Rollback();
+                        try
+                        {
+                            newTransaction.Rollback();
+                        }
+                        catch (Exception rollbackEx)
+                        {
+                            e = new DbRollbackException(e.Message, rollbackEx);
+                        }
                         newTransactionContext.Rollback();
-                        throw;
+                        throw e;
                     }
                 });
                 return DbTransactionResult.Success(affectedRows);
@@ -197,14 +212,21 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
                 }
                 catch (Exception e)
                 {
-                    await transaction.RollbackToSavepointAsync(savepoint);
+                    try
+                    {
+                        await transaction.RollbackToSavepointAsync(savepoint);
+                    }
+                    catch (Exception rollbackEx)
+                    {
+                        e = new DbRollbackException(e.Message, rollbackEx);
+                    }
                     transactionContext.Rollback();
-                    if (e is DbException { IsTransient: true }) throw;
+                    if (e is DbException { IsTransient: true } or DbRollbackException) throw e;
                     return DbTransactionResult.Failure(new ExceptionDbError(e));
                 }
                 finally
                 {
-                    await transaction.ReleaseSavepointAsync(savepoint);
+                    try { await transaction.ReleaseSavepointAsync(savepoint); } catch { }
                 }
             }
             else
@@ -240,11 +262,18 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
                         await newTransaction.CommitAsync();
                         return newTransactionContext.AffectedRows;
                     }
-                    catch
+                    catch (Exception e)
                     {
-                        await newTransaction.RollbackAsync();
+                        try
+                        {
+                            await newTransaction.RollbackAsync();
+                        }
+                        catch (Exception rollbackEx)
+                        {
+                            e = new DbRollbackException(e.Message, rollbackEx);
+                        }
                         newTransactionContext.Rollback();
-                        throw;
+                        throw e;
                     }
                 });
                 return DbTransactionResult.Success(affectedRows);
