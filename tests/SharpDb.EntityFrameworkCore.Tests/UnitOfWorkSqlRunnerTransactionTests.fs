@@ -75,6 +75,24 @@ module UnitOfWorkSqlRunnerTransactionTests =
         Assert.Equal(0, uow.PrivateContext.Set<DummyEntity>().CountAsync(fun e -> e.Name = name).Result)
 
     [<Fact>]
+    let ``EfcSqlRunner SqlExecuteAsync in UoW transaction rolls back with SQL-side rollback`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+        let name = "SqlRunnerRollback"
+        let result = uow.InTransaction(fun () ->
+            uow.Sql.ExecuteAsync($"""INSERT INTO DummyEntity (Name) VALUES ({name})""").AsTask().Wait()
+            uow.InTransaction(fun () ->
+                let rollbackResult = uow.Sql.RawExecuteAsync("ROLLBACK").AsTask() |> Async.AwaitTask |> Async.RunSynchronously
+                Assert.True(rollbackResult.IsSuccess)
+                raise (Exception("This is a custom error: Rolling back now"))
+            ) |> ignore
+            Assert.Fail()
+        )
+        Assert.False(result.IsSuccess)
+        Assert.Equal("This is a custom error: Rolling back now", result.Error.Message)
+        Assert.Equal(0, uow.PrivateContext.Set<DummyEntity>().CountAsync(fun e -> e.Name = name).Result)
+
+    [<Fact>]
     let ``Nested UoW transactions with EfcSqlRunner roll back inner only`` () =
         use dbContextFactory = new SqliteContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)

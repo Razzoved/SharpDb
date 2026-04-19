@@ -168,6 +168,27 @@ module UnitOfWorkTests =
         Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
 
     [<Fact>]
+    let ``InTransaction with SQL-side rollback rolls back on exception`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+        let entity = DummyEntity()
+        entity.Name <- "Test"
+        Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+        let result = uow.InTransaction(fun () ->
+            uow.Repository.Add(entity) |> ignore
+            uow.SaveChanges() |> ignore
+            uow.InTransaction(fun () ->
+                let rollbackResult = uow.Sql.RawExecuteAsync("ROLLBACK").AsTask() |> Async.AwaitTask |> Async.RunSynchronously
+                Assert.True(rollbackResult.IsSuccess)
+                raise (Exception("This is a custom error: Rolling back now"))
+            ) |> ignore
+            Assert.Fail()
+        )
+        Assert.False(result.IsSuccess)
+        Assert.Equal("This is a custom error: Rolling back now", result.Error.Message)
+        Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+
+    [<Fact>]
     let ``InTransaction rolls back to previous state on exception`` () =
         use dbContextFactory = new SqliteContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
