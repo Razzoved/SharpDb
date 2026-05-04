@@ -13,19 +13,22 @@ public static class DatabaseFacadeExtensions
     public static int SqlExecuteCommandTimeout { get; set; } = 120;
     public static int SqlStoredProcedureTimeout { get; set; } = 120;
 
-    public static ValueTask<DbQueryResult<T>> SqlSingleAsync<T>(this DatabaseFacade database, FormattableString sql, Func<DbDataReader, T> reader)
-        => database.RawSqlSingleAsync(sql.GetSqlCommandText(), reader, sql.GetSqlCommandParameters());
+    public static ValueTask<DbQueryResult<T>> SqlSingleAsync<T>(this DatabaseFacade database, FormattableString sql, Func<DbDataReader, T> reader, CancellationToken cancellation = default)
+        => database.RawSqlSingleAsync(sql.GetSqlCommandText(), reader, cancellation, sql.GetSqlCommandParameters());
 
-    public static ValueTask<DbQueryResult<T?>> SqlFirstOrDefaultAsync<T>(this DatabaseFacade database, FormattableString sql, Func<DbDataReader, T?> reader)
-        => database.RawSqlFirstOrDefaultAsync(sql.GetSqlCommandText(), reader, sql.GetSqlCommandParameters());
+    public static ValueTask<DbQueryResult<T?>> SqlFirstOrDefaultAsync<T>(this DatabaseFacade database, FormattableString sql, Func<DbDataReader, T?> reader, CancellationToken cancellation = default)
+        => database.RawSqlFirstOrDefaultAsync(sql.GetSqlCommandText(), reader, cancellation, sql.GetSqlCommandParameters());
 
-    public static ValueTask<DbQueryResult<IReadOnlyList<T>>> SqlManyAsync<T>(this DatabaseFacade database, FormattableString sql, Func<DbDataReader, T> reader)
-        => database.RawSqlManyAsync(sql.GetSqlCommandText(), reader, sql.GetSqlCommandParameters());
+    public static ValueTask<DbQueryResult<IReadOnlyList<T>>> SqlManyAsync<T>(this DatabaseFacade database, FormattableString sql, Func<DbDataReader, T> reader, CancellationToken cancellation = default)
+        => database.RawSqlManyAsync(sql.GetSqlCommandText(), reader, cancellation, sql.GetSqlCommandParameters());
 
-    public static ValueTask<DbExecResult> SqlExecuteAsync(this DatabaseFacade database, FormattableString sql)
-        => database.RawSqlExecuteAsync(sql.GetSqlCommandText(), sql.GetSqlCommandParameters());
+    public static ValueTask<DbExecResult> SqlExecuteAsync(this DatabaseFacade database, FormattableString sql, CancellationToken cancellation = default)
+        => database.RawSqlExecuteAsync(sql.GetSqlCommandText(), cancellation, sql.GetSqlCommandParameters());
 
-    public static async ValueTask<DbQueryResult<T>> RawSqlSingleAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    public static ValueTask<DbQueryResult<T>> RawSqlSingleAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+        => database.RawSqlSingleAsync(sql, reader, CancellationToken.None, parameters);
+
+    public static async ValueTask<DbQueryResult<T>> RawSqlSingleAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, CancellationToken cancellation, params DbParameter[] parameters)
     {
         try
         {
@@ -36,13 +39,13 @@ public static class DatabaseFacadeExtensions
                 args.cmd.AddSqlCommandParameters(args.state.parameters);
                 args.cmd.CommandText = args.state.sql;
 
-                await TryConnect(args.cmd);
+                await TryConnectAsync(args.cmd, cancellation);
 
-                await using var dbReader = await args.cmd.ExecuteReaderAsync();
-                if (await dbReader.ReadAsync())
+                await using var dbReader = await args.cmd.ExecuteReaderAsync(cancellation);
+                if (await dbReader.ReadAsync(cancellation))
                 {
                     var entity = args.state.reader(dbReader);
-                    if (!await dbReader.ReadAsync())
+                    if (!await dbReader.ReadAsync(cancellation))
                     {
                         if (dbReader.RecordsAffected > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
                         {
@@ -61,7 +64,10 @@ public static class DatabaseFacadeExtensions
         }
     }
 
-    public static async ValueTask<DbQueryResult<T?>> RawSqlFirstOrDefaultAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    public static ValueTask<DbQueryResult<T?>> RawSqlFirstOrDefaultAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+        => database.RawSqlFirstOrDefaultAsync(sql, reader, CancellationToken.None, parameters);
+
+    public static async ValueTask<DbQueryResult<T?>> RawSqlFirstOrDefaultAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, CancellationToken cancellation, params DbParameter[] parameters)
     {
         try
         {
@@ -72,10 +78,10 @@ public static class DatabaseFacadeExtensions
                 args.cmd.AddSqlCommandParameters(args.state.parameters);
                 args.cmd.CommandText = args.state.sql;
 
-                await TryConnect(args.cmd);
+                await TryConnectAsync(args.cmd, cancellation);
 
-                await using var dbReader = await args.cmd.ExecuteReaderAsync();
-                if (await dbReader.ReadAsync())
+                await using var dbReader = await args.cmd.ExecuteReaderAsync(cancellation);
+                if (await dbReader.ReadAsync(cancellation))
                 {
                     var entity = args.state.reader(dbReader);
                     if (dbReader.RecordsAffected > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
@@ -93,7 +99,10 @@ public static class DatabaseFacadeExtensions
         }
     }
 
-    public static async ValueTask<DbQueryResult<IReadOnlyList<T>>> RawSqlManyAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    public static ValueTask<DbQueryResult<IReadOnlyList<T>>> RawSqlManyAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+        => database.RawSqlManyAsync(sql, reader, CancellationToken.None, parameters);
+
+    public static async ValueTask<DbQueryResult<IReadOnlyList<T>>> RawSqlManyAsync<T>(this DatabaseFacade database, string sql, Func<DbDataReader, T> reader, CancellationToken cancellation, params DbParameter[] parameters)
     {
         try
         {
@@ -104,11 +113,11 @@ public static class DatabaseFacadeExtensions
                 args.cmd.AddSqlCommandParameters(args.state.parameters);
                 args.cmd.CommandText = args.state.sql;
 
-                await TryConnect(args.cmd);
+                await TryConnectAsync(args.cmd, cancellation);
 
-                await using var dbReader = await args.cmd.ExecuteReaderAsync();
+                await using var dbReader = await args.cmd.ExecuteReaderAsync(cancellation);
                 List<T> entities = new(128);
-                while (await dbReader.ReadAsync())
+                while (await dbReader.ReadAsync(cancellation))
                 {
                     var entity = args.state.reader(dbReader);
                     entities.Add(entity);
@@ -126,7 +135,10 @@ public static class DatabaseFacadeExtensions
         }
     }
 
-    public static async ValueTask<DbExecResult> RawSqlExecuteAsync(this DatabaseFacade database, string sql, params DbParameter[] parameters)
+    public static ValueTask<DbExecResult> RawSqlExecuteAsync(this DatabaseFacade database, string sql, params DbParameter[] parameters)
+        => database.RawSqlExecuteAsync(sql, CancellationToken.None, parameters);
+
+    public static async ValueTask<DbExecResult> RawSqlExecuteAsync(this DatabaseFacade database, string sql, CancellationToken cancellation = default, params DbParameter[] parameters)
     {
         try
         {
@@ -137,9 +149,9 @@ public static class DatabaseFacadeExtensions
                 args.cmd.AddSqlCommandParameters(args.state.parameters);
                 args.cmd.CommandText = args.state.sql;
 
-                await TryConnect(args.cmd);
+                await TryConnectAsync(args.cmd, cancellation);
 
-                int affectedRows = await args.cmd.ExecuteNonQueryAsync();
+                int affectedRows = await args.cmd.ExecuteNonQueryAsync(cancellation);
                 if (affectedRows > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
                 {
                     transactionContext.AddAffectedRows((uint)affectedRows);
@@ -153,7 +165,10 @@ public static class DatabaseFacadeExtensions
         }
     }
 
-    public static async ValueTask<DbQueryResult<T>> StoredProcedureSingleAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    public static ValueTask<DbQueryResult<T>> StoredProcedureSingleAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+        => database.StoredProcedureSingleAsync(procedureName, reader, CancellationToken.None, parameters);
+
+    public static async ValueTask<DbQueryResult<T>> StoredProcedureSingleAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, CancellationToken cancellation, params DbParameter[] parameters)
     {
         try
         {
@@ -164,13 +179,13 @@ public static class DatabaseFacadeExtensions
                 args.cmd.AddSqlCommandParameters(args.state.parameters);
                 args.cmd.CommandText = args.state.procedureName;
 
-                await TryConnect(args.cmd);
+                await TryConnectAsync(args.cmd, cancellation);
 
-                await using var dbReader = await args.cmd.ExecuteReaderAsync();
-                if (await dbReader.ReadAsync())
+                await using var dbReader = await args.cmd.ExecuteReaderAsync(cancellation);
+                if (await dbReader.ReadAsync(cancellation))
                 {
                     T entity = args.state.reader(dbReader);
-                    if (!await dbReader.ReadAsync())
+                    if (!await dbReader.ReadAsync(cancellation))
                     {
                         if (dbReader.RecordsAffected > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
                         {
@@ -189,7 +204,10 @@ public static class DatabaseFacadeExtensions
         }
     }
 
-    public static async ValueTask<DbQueryResult<T?>> StoredProcedureFirstOrDefaultAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    public static ValueTask<DbQueryResult<T?>> StoredProcedureFirstOrDefaultAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+        => database.StoredProcedureFirstOrDefaultAsync(procedureName, reader, CancellationToken.None, parameters);
+
+    public static async ValueTask<DbQueryResult<T?>> StoredProcedureFirstOrDefaultAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, CancellationToken cancellation, params DbParameter[] parameters)
     {
         try
         {
@@ -200,10 +218,10 @@ public static class DatabaseFacadeExtensions
                 args.cmd.AddSqlCommandParameters(args.state.parameters);
                 args.cmd.CommandText = args.state.procedureName;
 
-                await TryConnect(args.cmd);
+                await TryConnectAsync(args.cmd, cancellation);
 
-                await using var dbReader = await args.cmd.ExecuteReaderAsync();
-                if (await dbReader.ReadAsync())
+                await using var dbReader = await args.cmd.ExecuteReaderAsync(cancellation);
+                if (await dbReader.ReadAsync(cancellation))
                 {
                     var entity = args.state.reader(dbReader);
                     if (dbReader.RecordsAffected > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
@@ -221,7 +239,10 @@ public static class DatabaseFacadeExtensions
         }
     }
 
-    public static async ValueTask<DbQueryResult<IReadOnlyList<T>>> StoredProcedureManyAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+    public static ValueTask<DbQueryResult<IReadOnlyList<T>>> StoredProcedureManyAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, params DbParameter[] parameters)
+        => database.StoredProcedureManyAsync(procedureName, reader, CancellationToken.None, parameters);
+
+    public static async ValueTask<DbQueryResult<IReadOnlyList<T>>> StoredProcedureManyAsync<T>(this DatabaseFacade database, string procedureName, Func<DbDataReader, T> reader, CancellationToken cancellation, params DbParameter[] parameters)
     {
         DbQueryResult<IReadOnlyList<T>> result;
         try
@@ -233,11 +254,11 @@ public static class DatabaseFacadeExtensions
                 args.cmd.AddSqlCommandParameters(args.state.parameters);
                 args.cmd.CommandText = args.state.procedureName;
 
-                await TryConnect(args.cmd);
+                await TryConnectAsync(args.cmd, cancellation);
 
-                await using var dbReader = await args.cmd.ExecuteReaderAsync();
+                await using var dbReader = await args.cmd.ExecuteReaderAsync(cancellation);
                 List<T> entities = new(128);
-                while (await dbReader.ReadAsync())
+                while (await dbReader.ReadAsync(cancellation))
                 {
                     T entity = args.state.reader(dbReader);
                     entities.Add(entity);
@@ -256,7 +277,10 @@ public static class DatabaseFacadeExtensions
         return result;
     }
 
-    public static async ValueTask<DbExecResult> StoredProcedureExecuteAsync(this DatabaseFacade database, string procedureName, params DbParameter[] parameters)
+    public static ValueTask<DbExecResult> StoredProcedureExecuteAsync(this DatabaseFacade database, string procedureName, params DbParameter[] parameters)
+        => database.StoredProcedureExecuteAsync(procedureName, CancellationToken.None, parameters);
+
+    public static async ValueTask<DbExecResult> StoredProcedureExecuteAsync(this DatabaseFacade database, string procedureName, CancellationToken cancellation, params DbParameter[] parameters)
     {
         try
         {
@@ -267,9 +291,9 @@ public static class DatabaseFacadeExtensions
                 args.cmd.AddSqlCommandParameters(args.state.parameters);
                 args.cmd.CommandText = args.state.procedureName;
 
-                await TryConnect(args.cmd);
+                await TryConnectAsync(args.cmd, cancellation);
 
-                int affectedRows = await args.cmd.ExecuteNonQueryAsync();
+                int affectedRows = await args.cmd.ExecuteNonQueryAsync(cancellation);
                 if (affectedRows > 0 && TransactionContext.GetCurrent(args.db) is { } transactionContext)
                 {
                     transactionContext.AddAffectedRows((uint)affectedRows);
@@ -363,15 +387,16 @@ public static class DatabaseFacadeExtensions
     /// Tries to open the connection associated with the given command, if it is not already open.
     /// </summary>
     /// <param name="command">Command from which the connection is sourced</param>
+    /// <param name="cancellation">Cancellation token</param>
     /// <returns>Awaitable task</returns>
     /// <exception cref="InvalidOperationException"></exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static async Task TryConnect(DbCommand command)
+    private static async Task TryConnectAsync(DbCommand command, CancellationToken cancellation = default)
     {
         if (command.Connection is null)
             throw new InvalidOperationException(Resources.Text_Error_Command_MissingConnection);
         if (command.Connection.State != System.Data.ConnectionState.Open)
-            await command.Connection.OpenAsync();
+            await command.Connection.OpenAsync(cancellation);
     }
 
     private static void AddSqlCommandParameters(this DbCommand command, params DbParameter[] parameters)
