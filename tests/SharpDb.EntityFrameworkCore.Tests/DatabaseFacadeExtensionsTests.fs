@@ -7,6 +7,8 @@ open SharpDb
 open SharpDb.EntityFrameworkCore
 open System.Runtime.CompilerServices
 open Microsoft.Data.Sqlite
+open System.Threading
+open System.Threading.Tasks
 
 module DatabaseFacadeExtensionsTests =
 
@@ -296,3 +298,143 @@ module DatabaseFacadeExtensionsTests =
             ctx.Dispose()
             conn.Close()
             conn.Dispose()
+
+    [<Fact>]
+    let ``RawSqlSingleAsync honors cancellation`` () = task {
+        let ctx, conn = createContextSqlite()
+        try
+            let db = ctx.Database
+            use cts = new CancellationTokenSource()
+            cts.Cancel()
+            let! result = db.RawSqlSingleAsync<int>("SELECT 1", (fun r -> r.GetInt32(0)), cts.Token)
+            Assert.False(result.IsSuccess)
+            let typedErr = Assert.IsType<ExceptionDbError>(result.Error)
+            Assert.IsType<OperationCanceledException>(typedErr.Exception, exactMatch = false) |> ignore
+        finally
+            ctx.Dispose()
+            conn.Close()
+            conn.Dispose()
+    }
+
+    [<Fact>]
+    let ``RawSqlFirstOrDefaultAsync honors cancellation`` () = task {
+        let ctx, conn = createContextSqlite()
+        try
+            let db = ctx.Database
+            use cts = new CancellationTokenSource()
+            cts.Cancel()
+            let! result = db.RawSqlFirstOrDefaultAsync<int>("SELECT 1", (fun r -> r.GetInt32(0)), cts.Token)
+            Assert.False(result.IsSuccess)
+            let typedErr = Assert.IsType<ExceptionDbError>(result.Error)
+            Assert.IsType<OperationCanceledException>(typedErr.Exception, exactMatch = false) |> ignore
+        finally
+            ctx.Dispose()
+            conn.Close()
+            conn.Dispose()
+    }
+
+    [<Fact>]
+    let ``RawSqlManyAsync honors cancellation`` () = task {
+        let ctx, conn = createContextSqlite()
+        try
+            let db = ctx.Database
+            use cts = new CancellationTokenSource()
+            cts.Cancel()
+            let! result = db.RawSqlManyAsync<int>("SELECT 1", (fun r -> r.GetInt32(0)), cts.Token)
+            Assert.False(result.IsSuccess)
+            let typedErr = Assert.IsType<ExceptionDbError>(result.Error)
+            Assert.IsType<OperationCanceledException>(typedErr.Exception, exactMatch = false) |> ignore
+        finally
+            ctx.Dispose()
+            conn.Close()
+            conn.Dispose()
+    }
+
+    [<Fact>]
+    let ``RawSqlExecuteAsync honors cancellation`` () = task {
+        let ctx, conn = createContextSqlite()
+        try
+            let db = ctx.Database
+            use cts = new CancellationTokenSource()
+            cts.Cancel()
+            let! result = db.RawSqlExecuteAsync("SELECT 1", cts.Token, [||])
+            Assert.False(result.IsSuccess)
+            let typedErr = Assert.IsType<ExceptionDbError>(result.Error)
+            Assert.IsType<OperationCanceledException>(typedErr.Exception, exactMatch = false) |> ignore
+        finally
+            ctx.Dispose()
+            conn.Close()
+            conn.Dispose()
+    }
+
+    [<Fact>]
+    let ``SqlFirstOrDefaultAsync honors cancellation`` () = task {
+        let ctx, conn = createContextSqlite()
+        try
+            let db = ctx.Database
+            let sql = FormattableStringFactory.Create("SELECT 1", [||])
+            use cts = new CancellationTokenSource()
+            cts.Cancel()
+            let! result = db.SqlFirstOrDefaultAsync(sql, (fun r -> r.GetInt32(0)), cts.Token)
+            Assert.False(result.IsSuccess)
+            let typedErr = Assert.IsType<ExceptionDbError>(result.Error)
+            Assert.IsType<OperationCanceledException>(typedErr.Exception, exactMatch = false) |> ignore
+        finally
+            ctx.Dispose()
+            conn.Close()
+            conn.Dispose()
+    }
+
+    [<Fact>]
+    let ``SqlSingleAsync honors cancellation`` () = task {
+        let ctx, conn = createContextSqlite()
+        try
+            let db = ctx.Database
+            let sql = FormattableStringFactory.Create("SELECT 1", [||])
+            use cts = new CancellationTokenSource()
+            cts.Cancel()
+            let! result = db.SqlSingleAsync(sql, (fun r -> r.GetInt32(0)), cts.Token)
+            Assert.False(result.IsSuccess)
+            let typedErr = Assert.IsType<ExceptionDbError>(result.Error)
+            Assert.IsType<OperationCanceledException>(typedErr.Exception, exactMatch = false) |> ignore
+        finally
+            ctx.Dispose()
+            conn.Close()
+            conn.Dispose()
+    }
+
+    [<Fact>]
+    let ``SqlManyAsync honors cancellation`` () = task {
+        let ctx, conn = createContextSqlite()
+        try
+            let db = ctx.Database
+            let sql = FormattableStringFactory.Create("SELECT 1", [||])
+            use cts = new CancellationTokenSource()
+            cts.Cancel()
+            let! result = db.SqlManyAsync(sql, (fun r -> r.GetInt32(0)), cts.Token)
+            Assert.False(result.IsSuccess)
+            let typedErr = Assert.IsType<ExceptionDbError>(result.Error)
+            Assert.IsType<OperationCanceledException>(typedErr.Exception, exactMatch = false) |> ignore
+        finally
+            ctx.Dispose()
+            conn.Close()
+            conn.Dispose()
+    }
+
+    [<Fact>]
+    let ``SqlExecuteAsync honors cancellation`` () = task {
+        let ctx, conn = createContextSqlite()
+        try
+            let db = ctx.Database
+            let sql = FormattableStringFactory.Create("SELECT 1", [||])
+            use cts = new CancellationTokenSource()
+            cts.Cancel()
+            let! result = db.SqlExecuteAsync(sql, cts.Token)
+            Assert.False(result.IsSuccess)
+            let typedErr = Assert.IsType<ExceptionDbError>(result.Error)
+            Assert.IsType<OperationCanceledException>(typedErr.Exception, exactMatch = false) |> ignore
+        finally
+            ctx.Dispose()
+            conn.Close()
+            conn.Dispose()
+    }
