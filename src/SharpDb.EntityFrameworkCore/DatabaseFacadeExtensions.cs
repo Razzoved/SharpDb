@@ -4,6 +4,8 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using SharpDb.Exceptions;
+using SharpDb.Extensions;
 
 namespace SharpDb.EntityFrameworkCore;
 
@@ -58,6 +60,10 @@ public static class DatabaseFacadeExtensions
                 return DbQueryResult<T>.Failure(new StringDbError(Resources.Text_Error_Sql_NoRows));
             });
         }
+        catch (DbTransientException)
+        {
+            throw;
+        }
         catch (Exception e)
         {
             return DbQueryResult<T>.Failure(new ExceptionDbError(e));
@@ -92,6 +98,10 @@ public static class DatabaseFacadeExtensions
                 }
                 return DbQueryResult<T?>.Success(default);
             });
+        }
+        catch (DbTransientException)
+        {
+            throw;
         }
         catch (Exception e)
         {
@@ -129,6 +139,10 @@ public static class DatabaseFacadeExtensions
                 return DbQueryResult<IReadOnlyList<T>>.Success(entities);
             });
         }
+        catch (DbTransientException)
+        {
+            throw;
+        }
         catch (Exception e)
         {
             return DbQueryResult<IReadOnlyList<T>>.Failure(new ExceptionDbError(e));
@@ -158,6 +172,10 @@ public static class DatabaseFacadeExtensions
                 }
                 return DbExecResult.Success(affectedRows);
             });
+        }
+        catch (DbTransientException)
+        {
+            throw;
         }
         catch (Exception e)
         {
@@ -198,6 +216,10 @@ public static class DatabaseFacadeExtensions
                 return DbQueryResult<T>.Failure(new StringDbError(Resources.Text_Error_Sql_NoRows));
             });
         }
+        catch (DbTransientException)
+        {
+            throw;
+        }
         catch (Exception e)
         {
             return DbQueryResult<T>.Failure(new ExceptionDbError(e));
@@ -232,6 +254,10 @@ public static class DatabaseFacadeExtensions
                 }
                 return DbQueryResult<T?>.Success(default);
             });
+        }
+        catch (DbTransientException)
+        {
+            throw;
         }
         catch (Exception e)
         {
@@ -270,6 +296,10 @@ public static class DatabaseFacadeExtensions
                 return DbQueryResult<IReadOnlyList<T>>.Success(entities);
             });
         }
+        catch (DbTransientException)
+        {
+            throw;
+        }
         catch (Exception e)
         {
             result = DbQueryResult<IReadOnlyList<T>>.Failure(new ExceptionDbError(e));
@@ -300,6 +330,10 @@ public static class DatabaseFacadeExtensions
                 }
                 return DbExecResult.Success(affectedRows);
             });
+        }
+        catch (DbTransientException)
+        {
+            throw;
         }
         catch (Exception e)
         {
@@ -410,15 +444,36 @@ public static class DatabaseFacadeExtensions
         }
     }
 
+    /// <summary>
+    /// Executes a database command with the given state and returns the result.
+    /// </summary>
+    /// <returns>Result of the command execution</returns>
+    /// <exception cref="DbTransientException">When a transient exception occurred during a transaction</exception>
+    /// <exception cref="Exception"></exception>
     private static async Task<TResult> RunCommandAsync<TState, TResult>(
         this DatabaseFacade database,
         TState state,
         Func<(DatabaseFacade db, DbCommand cmd, TState state), Task<TResult>> commandAction)
+        where TResult : IDbResult
     {
         await using var command = CreateCommand(database);
         if (database.CurrentTransaction is not null)
         {
-            return await commandAction((database, command, state));
+            try
+            {
+                var result = await commandAction((database, command, state));
+                if (result is { IsSuccess: false, Error.IsTransient: true })
+                    throw new DbTransientException(result.Error);
+                return result;
+            }
+            catch (DbTransientException)
+            {
+                throw;
+            }
+            catch (Exception e) when (e is DbException { IsTransient: true } || e.HasTransientDbError())
+            {
+                throw new DbTransientException(e);
+            }
         }
         else
         {
