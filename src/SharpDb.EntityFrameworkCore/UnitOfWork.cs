@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.EntityFrameworkCore;
 using SharpDb.Exceptions;
+using SharpDb.Extensions;
 
 namespace SharpDb.EntityFrameworkCore;
 
@@ -36,24 +37,56 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     /// </summary>
     protected TContext DbContext { get; } = dbContextFactory.CreateDbContext();
 
-    public int SaveChanges()
+    public DbTransactionResult SaveChanges()
     {
-        int affectedRows = DbContext.SaveChanges();
-        if (affectedRows > 0 && TransactionContext.GetCurrent(DbContext.Database) is { } transactionContext)
+        TransactionContext? transactionContext = TransactionContext.GetCurrent(DbContext.Database);
+        try
         {
-            transactionContext.AddAffectedRows((uint)affectedRows);
+            int affectedRows = DbContext.SaveChanges();
+            if (affectedRows > 0 && transactionContext is not null)
+                transactionContext.AddAffectedRows((uint)affectedRows);
+            return DbTransactionResult.Success(affectedRows);
         }
-        return affectedRows;
+        catch (Exception e) when (transactionContext is not null)
+        {
+            if (e is DbUpdateException { InnerException: { } innerEx })
+                e = innerEx;
+            if (e.HasTransientDbError())
+                throw e;
+            return DbTransactionResult.Failure(new ExceptionDbError(e));
+        }
+        catch (Exception e)
+        {
+            if (e is DbUpdateException { InnerException: { } innerEx })
+                e = innerEx;
+            return DbTransactionResult.Failure(new ExceptionDbError(e));
+        }
     }
 
-    public async ValueTask<int> SaveChangesAsync()
+    public async ValueTask<DbTransactionResult> SaveChangesAsync()
     {
-        int affectedRows = await DbContext.SaveChangesAsync();
-        if (affectedRows > 0 && TransactionContext.GetCurrent(DbContext.Database) is { } transactionContext)
+        TransactionContext? transactionContext = TransactionContext.GetCurrent(DbContext.Database);
+        try
         {
-            transactionContext.AddAffectedRows((uint)affectedRows);
+            int affectedRows = await DbContext.SaveChangesAsync();
+            if (affectedRows > 0 && transactionContext is not null)
+                transactionContext.AddAffectedRows((uint)affectedRows);
+            return DbTransactionResult.Success(affectedRows);
         }
-        return affectedRows;
+        catch (Exception e) when (transactionContext is not null)
+        {
+            if (e is DbUpdateException { InnerException: { } innerEx })
+                e = innerEx;
+            if (e.HasTransientDbError())
+                throw e;
+            return DbTransactionResult.Failure(new ExceptionDbError(e));
+        }
+        catch (Exception e)
+        {
+            if (e is DbUpdateException { InnerException: { } innerEx })
+                e = innerEx;
+            return DbTransactionResult.Failure(new ExceptionDbError(e));
+        }
     }
 
     public void DiscardChanges()

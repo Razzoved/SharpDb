@@ -10,16 +10,16 @@ public interface IUnitOfWork : IDisposable
     /// <summary>
     /// Saves all pending changes to the database.
     /// </summary>
-    /// <returns>Count of affected rows</returns>
+    /// <returns>Result of save operation with count of affected rows</returns>
     /// <exception cref="Exception">If an error occurs during save</exception>
-    int SaveChanges();
+    DbTransactionResult SaveChanges();
 
     /// <summary>
     /// Asynchronously saves all pending changes to the database.
     /// </summary>
-    /// <returns>Count of affected rows</returns>
+    /// <returns>Result of save operation with count of affected rows</returns>
     /// <exception cref="Exception">If an error occurs during save</exception>
-    ValueTask<int> SaveChangesAsync();
+    ValueTask<DbTransactionResult> SaveChangesAsync();
 
     /// <summary>
     /// Discards all pending changes. Has no effect on the database.
