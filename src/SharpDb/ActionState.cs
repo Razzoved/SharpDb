@@ -6,7 +6,7 @@ namespace SharpDb;
 /// Represents the result of an action executed within a transaction.
 /// Depending on the state, transaction may be committed or rolled back.
 /// </summary>
-public sealed class ActionState
+public readonly struct ActionState
 {
     private readonly IDbError? _error;
 
