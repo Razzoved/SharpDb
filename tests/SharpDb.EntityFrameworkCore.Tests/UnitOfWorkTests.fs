@@ -100,8 +100,9 @@ module UnitOfWorkTests =
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
         uow.Repository.Add(entity) |> ignore
-        let affected = uow.SaveChanges()
-        Assert.Equal(1, affected)
+        let result = uow.SaveChanges()
+        Assert.True(result.IsSuccess)
+        Assert.Equal(1L, result.AffectedRows)
 
     [<Fact>]
     let ``SaveChangesAsync returns affected rows`` () =
@@ -109,8 +110,9 @@ module UnitOfWorkTests =
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
         uow.Repository.Add(entity) |> ignore
-        let affected = uow.SaveChangesAsync().Result
-        Assert.Equal(1, affected)
+        let result = uow.SaveChangesAsync().Result
+        Assert.True(result.IsSuccess)
+        Assert.Equal(1L, result.AffectedRows)
 
     [<Fact>]
     let ``DiscardChanges clears change tracker`` () =
