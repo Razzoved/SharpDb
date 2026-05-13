@@ -119,32 +119,29 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
                 {
                     using var newTransaction = actionContext.DbContext.Database.BeginTransaction();
                     using var newTransactionContext = new TransactionContext(actionContext.DbContext);
+
+                    ActionState state;
                     try
                     {
-                        var state = actionContext.action();
-                        if (state.IsAborted)
+                        state = actionContext.action();
+                        if (!state.IsAborted)
                         {
-                            var exception = state.Error is ExceptionDbError { Exception: not null } exError
-                                ? exError.Exception
-                                : new InvalidOperationException(state.Error.Message);
-                            throw exception;
+                            newTransaction.Commit();
+                            return newTransactionContext.AffectedRows;
                         }
-                        newTransaction.Commit();
-                        return newTransactionContext.AffectedRows;
                     }
                     catch (Exception e)
                     {
-                        try
-                        {
-                            newTransaction.Rollback();
-                        }
-                        catch (Exception rollbackEx)
-                        {
-                            e = new DbRollbackException(e.Message, rollbackEx);
-                        }
-                        newTransactionContext.Rollback();
-                        throw e;
+                        state = ActionState.Abort(new ExceptionDbError(e));
                     }
+
+                    try { newTransaction.Rollback(); }
+                    catch (Exception e) { throw new DbRollbackException(state.Error.Message, e); }
+                    finally { newTransactionContext.Rollback(); }
+
+                    if (state.Error is ExceptionDbError exError)
+                        throw exError.Exception;
+                    throw new InvalidOperationException(state.Error.Message);
                 });
                 return DbTransactionResult.Success(affectedRows);
             }
@@ -155,33 +152,33 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
         }
         else if (transaction.SupportsSavepoints)
         {
+            using var transactionContext = new TransactionContext(DbContext);
             string savepoint = Guid.NewGuid().ToString("N");
             transaction.CreateSavepoint(savepoint);
-            using var transactionContext = new TransactionContext(DbContext);
             try
             {
-                var state = action();
-                if (state.IsAborted)
-                {
-                    transaction.RollbackToSavepoint(savepoint);
-                    transactionContext.Rollback();
-                    return DbTransactionResult.Failure(state.Error);
-                }
-                return DbTransactionResult.Success(transactionContext.AffectedRows);
-            }
-            catch (Exception e)
-            {
+                ActionState state;
                 try
                 {
-                    transaction.RollbackToSavepoint(savepoint);
+                    state = action();
+                    if (!state.IsAborted)
+                    {
+                        uint affectedRows = transactionContext.AffectedRows;
+                        return DbTransactionResult.Success(affectedRows);
+                    }
                 }
-                catch (Exception rollbackEx)
+                catch (Exception e)
                 {
-                    e = new DbRollbackException(e.Message, rollbackEx);
+                    state = ActionState.Abort(new ExceptionDbError(e));
                 }
-                transactionContext.Rollback();
-                if (e is DbException { IsTransient: true } or DbRollbackException) throw e;
-                return DbTransactionResult.Failure(new ExceptionDbError(e));
+
+                try { transaction.RollbackToSavepoint(savepoint); }
+                catch (Exception e) { throw new DbRollbackException(state.Error.Message, e); }
+                finally { transactionContext.Rollback(); }
+
+                if (state.Error.IsTransient)
+                    throw new DbTransientException(state.Error);
+                return DbTransactionResult.Failure(state.Error);
             }
             finally
             {
@@ -190,9 +187,11 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
         }
         else
         {
-            var state = action();
+            ActionState state = action();
             if (state.IsAborted)
             {
+                if (state.Error.IsTransient)
+                    throw new DbTransientException(state.Error);
                 return DbTransactionResult.Failure(state.Error);
             }
             uint affectedRows = TransactionContext.GetCurrent(DbContext.Database)?.AffectedRows ?? 0;
@@ -236,32 +235,29 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
                 {
                     await using var newTransaction = await actionContext.DbContext.Database.BeginTransactionAsync();
                     using var newTransactionContext = new TransactionContext(actionContext.DbContext);
+
+                    ActionState state;
                     try
                     {
-                        var state = await actionContext.asyncAction();
-                        if (state.IsAborted)
+                        state = await actionContext.asyncAction();
+                        if (!state.IsAborted)
                         {
-                            var exception = state.Error is ExceptionDbError { Exception: not null } exError
-                                ? exError.Exception
-                                : new InvalidOperationException(state.Error.Message);
-                            throw exception;
+                            await newTransaction.CommitAsync();
+                            return newTransactionContext.AffectedRows;
                         }
-                        await newTransaction.CommitAsync();
-                        return newTransactionContext.AffectedRows;
                     }
                     catch (Exception e)
                     {
-                        try
-                        {
-                            await newTransaction.RollbackAsync();
-                        }
-                        catch (Exception rollbackEx)
-                        {
-                            e = new DbRollbackException(e.Message, rollbackEx);
-                        }
-                        newTransactionContext.Rollback();
-                        throw e;
+                        state = ActionState.Abort(new ExceptionDbError(e));
                     }
+
+                    try { await newTransaction.RollbackAsync(); }
+                    catch (Exception e) { throw new DbRollbackException(state.Error.Message, e); }
+                    finally { newTransactionContext.Rollback(); }
+
+                    if (state.Error is ExceptionDbError exError)
+                        throw exError.Exception;
+                    throw new InvalidOperationException(state.Error.Message);
                 });
                 return DbTransactionResult.Success(affectedRows);
             }
@@ -272,33 +268,33 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
         }
         else if (transaction.SupportsSavepoints)
         {
+            using var transactionContext = new TransactionContext(DbContext);
             string savepoint = Guid.NewGuid().ToString("N");
             await transaction.CreateSavepointAsync(savepoint);
-            using var transactionContext = new TransactionContext(DbContext);
             try
             {
-                var state = await asyncAction();
-                if (state.IsAborted)
-                {
-                    await transaction.RollbackToSavepointAsync(savepoint);
-                    transactionContext.Rollback();
-                    return DbTransactionResult.Failure(state.Error);
-                }
-                return DbTransactionResult.Success(transactionContext.AffectedRows);
-            }
-            catch (Exception e)
-            {
+                ActionState state;
                 try
                 {
-                    await transaction.RollbackToSavepointAsync(savepoint);
+                    state = await asyncAction();
+                    if (!state.IsAborted)
+                    {
+                        uint affectedRows = transactionContext.AffectedRows;
+                        return DbTransactionResult.Success(affectedRows);
+                    }
                 }
-                catch (Exception rollbackEx)
+                catch (Exception e)
                 {
-                    e = new DbRollbackException(e.Message, rollbackEx);
+                    state = ActionState.Abort(new ExceptionDbError(e));
                 }
-                transactionContext.Rollback();
-                if (e is DbException { IsTransient: true } or DbRollbackException) throw e;
-                return DbTransactionResult.Failure(new ExceptionDbError(e));
+
+                try { await transaction.RollbackToSavepointAsync(savepoint); }
+                catch (Exception e) { throw new DbRollbackException(state.Error.Message, e); }
+                finally { transactionContext.Rollback(); }
+
+                if (state.Error.IsTransient)
+                    throw new DbTransientException(state.Error);
+                return DbTransactionResult.Failure(state.Error);
             }
             finally
             {
@@ -307,9 +303,11 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
         }
         else
         {
-            var state = await asyncAction();
+            ActionState state = await asyncAction();
             if (state.IsAborted)
             {
+                if (state.Error.IsTransient)
+                    throw new DbTransientException(state.Error);
                 return DbTransactionResult.Failure(state.Error);
             }
             uint affectedRows = TransactionContext.GetCurrent(DbContext.Database)?.AffectedRows ?? 0;
