@@ -210,11 +210,16 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     /// is nested inside an active transaction and the exception itself is caused by transient error.
     /// </remarks>
     /// <exception cref="DbException">When transient error occurs in a nested call</exception>
-    public DbTransactionResult InTransaction(Action action) => InTransaction(() =>
+    public DbTransactionResult InTransaction(Action action)
     {
-        action();
-        return ActionState.Complete();
-    });
+        return InTransaction(WrappedAction);
+
+        ActionState WrappedAction()
+        {
+            action();
+            return ActionState.Complete();
+        }
+    }
 
     /// <inheritdoc/>
     /// <remarks>
@@ -325,11 +330,16 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     /// is nested inside an active transaction and the exception itself is caused by transient error.
     /// </remarks>
     /// <exception cref="DbException">When transient error occurs in a nested call</exception>
-    public ValueTask<DbTransactionResult> InTransactionAsync(Func<Task> asyncAction) => InTransactionAsync(async () =>
+    public ValueTask<DbTransactionResult> InTransactionAsync(Func<Task> asyncAction)
     {
-        await asyncAction();
-        return ActionState.Complete();
-    });
+        return InTransactionAsync(WrappedAction);
+
+        async Task<ActionState> WrappedAction()
+        {
+            await asyncAction();
+            return ActionState.Complete();
+        }
+    }
 
     public void Dispose()
     {
