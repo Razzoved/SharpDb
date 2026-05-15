@@ -24,10 +24,24 @@ public readonly struct DbSmallDateTime : IComparable, IComparable<DbSmallDateTim
 
     public int CompareTo(DbSmallDateTime other) => CompareTo(other.Value);
     public int CompareTo(DateTimeOffset other) => Value.CompareTo(other);
-    public int CompareTo(object? obj) => ((IComparable)Value).CompareTo(obj);
+    public int CompareTo(object? obj)
+    {
+        if (obj is DbSmallDateTime other)
+            return CompareTo(other);
+        if (obj is DateTimeOffset dateTimeOffset)
+            return CompareTo(dateTimeOffset);
+        throw new ArgumentException($"Cannot compare {nameof(DbSmallDateTime)} with {obj?.GetType().Name ?? "null"}", nameof(obj));
+    }
     public bool Equals(DbSmallDateTime other) => Equals(other.Value);
     public bool Equals(DateTimeOffset other) => Value.Equals(other);
-    public override bool Equals(object? obj) => Value.Equals(obj);
+    public override bool Equals(object? obj)
+    {
+        if (obj is DbSmallDateTime other)
+            return Equals(other);
+        if (obj is DateTimeOffset dateTimeOffset)
+            return Equals(dateTimeOffset);
+        return false;
+    }
     public override int GetHashCode() => Value.GetHashCode();
 
     private static DateTimeOffset Clamp(DateTimeOffset value) => value switch
