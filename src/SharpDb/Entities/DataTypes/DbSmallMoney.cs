@@ -31,9 +31,23 @@ public readonly struct DbSmallMoney : IComparable, IComparable<DbSmallMoney>, IE
 
     public int CompareTo(DbSmallMoney other) => CompareTo(other.Value);
     public int CompareTo(decimal other) => Value.CompareTo(other);
-    public int CompareTo(object? obj) => Value.CompareTo(obj);
+    public int CompareTo(object? obj)
+    {
+        if (obj is DbSmallMoney other)
+            return CompareTo(other);
+        if (obj is decimal dec)
+            return CompareTo(dec);
+        throw new ArgumentException($"Cannot compare {nameof(DbSmallMoney)} with {obj?.GetType().Name ?? "null"}", nameof(obj));
+    }
     public bool Equals(DbSmallMoney other) => Equals(other.Value);
     public bool Equals(decimal other) => Value.Equals(other);
-    public override bool Equals(object? obj) => Value.Equals(obj);
+    public override bool Equals(object? obj)
+    {
+        if (obj is DbSmallMoney other)
+            return Equals(other);
+        if (obj is decimal dec)
+            return Equals(dec);
+        return false;
+    }
     public override int GetHashCode() => Value.GetHashCode();
 }
