@@ -10,7 +10,6 @@ namespace SharpDb;
 public interface IDbError
 {
     string Message { get; }
-    bool IsTransient { get; }
 
     static bool AreEqual(IDbError? a, IDbError? b)
     {
@@ -28,7 +27,6 @@ public sealed class NoDbError : IDbError
     public static readonly NoDbError Instance = new();
 
     public string Message => string.Empty;
-    public bool IsTransient => false;
 
     public override bool Equals([NotNullWhen(true)] object? obj) => obj is NoDbError;
     public override int GetHashCode() => typeof(NoDbError).GetHashCode();
@@ -44,16 +42,10 @@ public sealed class NoDbError : IDbError
 /// </summary>
 public class StringDbError(string message) : IDbError
 {
-    public StringDbError(string message, bool isTransient) : this(message)
-    {
-        IsTransient = isTransient;
-    }
-
     public string Message { get; } = message;
-    public bool IsTransient { get; }
 
-    public override bool Equals([NotNullWhen(true)] object? obj) => obj is StringDbError other && Message == other.Message && IsTransient == other.IsTransient;
-    public override int GetHashCode() => HashCode.Combine(typeof(StringDbError), Message, IsTransient);
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is StringDbError other && Message == other.Message;
+    public override int GetHashCode() => HashCode.Combine(typeof(StringDbError), Message);
     public override string ToString() => Message;
 
     public static bool operator ==(StringDbError left, StringDbError right) => left.Equals(right);
