@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>8.3.0</Version>
+    <Version>8.3.1</Version>
     <Description>Library providing utilities/extensions for Microsoft.EntityFrameworkCore</Description>
     <Authors>Jan Martinek</Authors>
     <Keyword>sharpdb lib database data efc</Keyword>
@@ -20,6 +20,8 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReleaseNotes>
+      [8.3.1] - 2026-05-18
+      - Reworked exception handling in transactions and queries due to errors in transiency
       [8.3.0] - 2026-05-13
       - Added support for CancellationToken to SQL queries
       - Improved transient error handling in transactions
