@@ -60,7 +60,7 @@ public static class DatabaseFacadeExtensions
                 return DbQueryResult<T>.Failure(new StringDbError(Resources.Text_Error_Sql_NoRows));
             });
         }
-        catch (DbTransientException)
+        catch (TransactionTransientException)
         {
             throw;
         }
@@ -99,7 +99,7 @@ public static class DatabaseFacadeExtensions
                 return DbQueryResult<T?>.Success(default);
             });
         }
-        catch (DbTransientException)
+        catch (TransactionTransientException)
         {
             throw;
         }
@@ -139,7 +139,7 @@ public static class DatabaseFacadeExtensions
                 return DbQueryResult<IReadOnlyList<T>>.Success(entities);
             });
         }
-        catch (DbTransientException)
+        catch (TransactionTransientException)
         {
             throw;
         }
@@ -173,7 +173,7 @@ public static class DatabaseFacadeExtensions
                 return DbExecResult.Success(affectedRows);
             });
         }
-        catch (DbTransientException)
+        catch (TransactionTransientException)
         {
             throw;
         }
@@ -216,7 +216,7 @@ public static class DatabaseFacadeExtensions
                 return DbQueryResult<T>.Failure(new StringDbError(Resources.Text_Error_Sql_NoRows));
             });
         }
-        catch (DbTransientException)
+        catch (TransactionTransientException)
         {
             throw;
         }
@@ -255,7 +255,7 @@ public static class DatabaseFacadeExtensions
                 return DbQueryResult<T?>.Success(default);
             });
         }
-        catch (DbTransientException)
+        catch (TransactionTransientException)
         {
             throw;
         }
@@ -296,7 +296,7 @@ public static class DatabaseFacadeExtensions
                 return DbQueryResult<IReadOnlyList<T>>.Success(entities);
             });
         }
-        catch (DbTransientException)
+        catch (TransactionTransientException)
         {
             throw;
         }
@@ -331,7 +331,7 @@ public static class DatabaseFacadeExtensions
                 return DbExecResult.Success(affectedRows);
             });
         }
-        catch (DbTransientException)
+        catch (TransactionTransientException)
         {
             throw;
         }
@@ -448,7 +448,7 @@ public static class DatabaseFacadeExtensions
     /// Executes a database command with the given state and returns the result.
     /// </summary>
     /// <returns>Result of the command execution</returns>
-    /// <exception cref="DbTransientException">When a transient exception occurred during a transaction</exception>
+    /// <exception cref="TransactionTransientException">When a transient exception occurred during a transaction</exception>
     /// <exception cref="Exception"></exception>
     private static async Task<TResult> RunCommandAsync<TState, TResult>(
         this DatabaseFacade database,
@@ -461,18 +461,18 @@ public static class DatabaseFacadeExtensions
         {
             try
             {
-                var result = await commandAction((database, command, state));
-                if (result is { IsSuccess: false, Error.IsTransient: true })
-                    throw new DbTransientException(result.Error);
+                TResult? result = await commandAction((database, command, state));
+                if (result is ExceptionDbError { IsTransient: true } err)
+                    throw new TransactionTransientException(err.Message, err.Exception);
                 return result;
             }
-            catch (DbTransientException)
+            catch (TransactionTransientException)
             {
                 throw;
             }
-            catch (Exception e) when (e is DbException { IsTransient: true } || e.HasTransientDbError())
+            catch (Exception e) when (e.HasTransientDbError())
             {
-                throw new DbTransientException(e);
+                throw new TransactionTransientException(e);
             }
         }
         else

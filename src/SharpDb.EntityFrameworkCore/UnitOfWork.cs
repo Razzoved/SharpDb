@@ -1,5 +1,4 @@
-﻿using System.Data.Common;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.EntityFrameworkCore;
 using SharpDb.Exceptions;
@@ -107,7 +106,7 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     /// repeated several times when the transaction is retried. Throws an exception if the call
     /// is nested inside an active transaction and the exception itself is caused by transient error.
     /// </remarks>
-    /// <exception cref="DbException">When transient error occurs in a nested call</exception>
+    /// <exception cref="TransactionTransientException">When transient error occurs in a nested call</exception>
     public DbTransactionResult InTransaction(Func<ActionState> action)
     {
         if (DbContext.Database.CurrentTransaction is not { } transaction)
@@ -115,35 +114,46 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             var strategy = DbContext.Database.CreateExecutionStrategy();
             try
             {
-                uint affectedRows = strategy.Execute((DbContext, action), actionContext =>
+                return strategy.Execute((DbContext, action), static actionContext =>
                 {
                     using var newTransaction = actionContext.DbContext.Database.BeginTransaction();
                     using var newTransactionContext = new TransactionContext(actionContext.DbContext);
 
-                    ActionState state;
+                    IDbError error;
                     try
                     {
-                        state = actionContext.action();
+                        ActionState state = actionContext.action();
                         if (!state.IsAborted)
                         {
                             newTransaction.Commit();
-                            return newTransactionContext.AffectedRows;
+                            return DbTransactionResult.Success(newTransactionContext.AffectedRows);
                         }
+                        error = state.Error;
                     }
                     catch (Exception e)
                     {
-                        state = ActionState.Abort(new ExceptionDbError(e));
+                        error = new ExceptionDbError(e);
                     }
 
                     try { newTransaction.Rollback(); }
-                    catch (Exception e) { throw new DbRollbackException(state.Error.Message, e); }
+                    catch { /* Do nothing (we may log it in future), we are at top-level */ }
                     finally { newTransactionContext.Rollback(); }
 
-                    if (state.Error is ExceptionDbError exError)
-                        throw exError.Exception;
-                    throw new InvalidOperationException(state.Error.Message);
+                    if (error is ExceptionDbError exceptionDbError)
+                    {
+                        if (exceptionDbError.Exception.GetTransientDbError() is { } transientException)
+                        {
+                            if (GetDbError(transientException) is null)
+                                AttachDbError(transientException, error);
+                            throw transientException;
+                        }
+                    }
+                    return DbTransactionResult.Failure(error);
                 });
-                return DbTransactionResult.Success(affectedRows);
+            }
+            catch (Exception e) when (GetDbError(e) is { } dbError)
+            {
+                return DbTransactionResult.Failure(dbError);
             }
             catch (Exception e)
             {
@@ -157,28 +167,36 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             transaction.CreateSavepoint(savepoint);
             try
             {
-                ActionState state;
+                IDbError error;
                 try
                 {
-                    state = action();
+                    ActionState state = action();
                     if (!state.IsAborted)
                     {
                         uint affectedRows = transactionContext.AffectedRows;
                         return DbTransactionResult.Success(affectedRows);
                     }
+                    error = state.Error;
                 }
                 catch (Exception e)
                 {
-                    state = ActionState.Abort(new ExceptionDbError(e));
+                    error = new ExceptionDbError(e);
                 }
 
                 try { transaction.RollbackToSavepoint(savepoint); }
-                catch (Exception e) { throw new DbRollbackException(state.Error.Message, e); }
+                catch (Exception e) { throw new TransactionRollbackException(error, e); }
                 finally { transactionContext.Rollback(); }
 
-                if (state.Error.IsTransient)
-                    throw new DbTransientException(state.Error);
-                return DbTransactionResult.Failure(state.Error);
+                if (error is ExceptionDbError exceptionDbError)
+                {
+                    if (exceptionDbError.Exception.GetTransientDbError() is { } transientException)
+                    {
+                        if (GetDbError(transientException) is null)
+                            AttachDbError(transientException, error);
+                        throw new TransactionTransientException(exceptionDbError.Message, transientException);
+                    }
+                }
+                return DbTransactionResult.Failure(error);
             }
             finally
             {
@@ -190,8 +208,15 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             ActionState state = action();
             if (state.IsAborted)
             {
-                if (state.Error.IsTransient)
-                    throw new DbTransientException(state.Error);
+                if (state.Error is ExceptionDbError exceptionDbError)
+                {
+                    if (exceptionDbError.Exception.GetTransientDbError() is { } transientException)
+                    {
+                        if (GetDbError(transientException) is null)
+                            AttachDbError(transientException, state.Error);
+                        throw new TransactionTransientException(exceptionDbError.Message, transientException);
+                    }
+                }
                 return DbTransactionResult.Failure(state.Error);
             }
             uint affectedRows = TransactionContext.GetCurrent(DbContext.Database)?.AffectedRows ?? 0;
@@ -200,12 +225,6 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// Take care when using any non-efc logic, such as adding to lists, since the operations might be
-    /// repeated several times when the transaction is retried. Throws an exception if the call
-    /// is nested inside an active transaction and the exception itself is caused by transient error.
-    /// </remarks>
-    /// <exception cref="DbException">When transient error occurs in a nested call</exception>
     public DbTransactionResult InTransaction(Action action)
     {
         return InTransaction(WrappedAction);
@@ -231,35 +250,46 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             var strategy = DbContext.Database.CreateExecutionStrategy();
             try
             {
-                uint affectedRows = await strategy.ExecuteAsync((DbContext, asyncAction), async actionContext =>
+                return await strategy.ExecuteAsync((DbContext, asyncAction), static async actionContext =>
                 {
                     await using var newTransaction = await actionContext.DbContext.Database.BeginTransactionAsync();
                     using var newTransactionContext = new TransactionContext(actionContext.DbContext);
 
-                    ActionState state;
+                    IDbError error;
                     try
                     {
-                        state = await actionContext.asyncAction();
+                        ActionState state = await actionContext.asyncAction();
                         if (!state.IsAborted)
                         {
                             await newTransaction.CommitAsync();
-                            return newTransactionContext.AffectedRows;
+                            return DbTransactionResult.Success(newTransactionContext.AffectedRows);
                         }
+                        error = state.Error;
                     }
                     catch (Exception e)
                     {
-                        state = ActionState.Abort(new ExceptionDbError(e));
+                        error = new ExceptionDbError(e);
                     }
 
                     try { await newTransaction.RollbackAsync(); }
-                    catch (Exception e) { throw new DbRollbackException(state.Error.Message, e); }
+                    catch { /* Do nothing (we may log it in future), we are at top-level */ }
                     finally { newTransactionContext.Rollback(); }
 
-                    if (state.Error is ExceptionDbError exError)
-                        throw exError.Exception;
-                    throw new InvalidOperationException(state.Error.Message);
+                    if (error is ExceptionDbError exceptionDbError)
+                    {
+                        if (exceptionDbError.Exception.GetTransientDbError() is { } transientException)
+                        {
+                            if (GetDbError(transientException) is null)
+                                AttachDbError(transientException, error);
+                            throw transientException;
+                        }
+                    }
+                    return DbTransactionResult.Failure(error);
                 });
-                return DbTransactionResult.Success(affectedRows);
+            }
+            catch (Exception e) when (GetDbError(e) is { } dbError)
+            {
+                return DbTransactionResult.Failure(dbError);
             }
             catch (Exception e)
             {
@@ -273,28 +303,36 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             await transaction.CreateSavepointAsync(savepoint);
             try
             {
-                ActionState state;
+                IDbError error;
                 try
                 {
-                    state = await asyncAction();
+                    ActionState state = await asyncAction();
                     if (!state.IsAborted)
                     {
                         uint affectedRows = transactionContext.AffectedRows;
                         return DbTransactionResult.Success(affectedRows);
                     }
+                    error = state.Error;
                 }
                 catch (Exception e)
                 {
-                    state = ActionState.Abort(new ExceptionDbError(e));
+                    error = new ExceptionDbError(e);
                 }
 
                 try { await transaction.RollbackToSavepointAsync(savepoint); }
-                catch (Exception e) { throw new DbRollbackException(state.Error.Message, e); }
+                catch (Exception e) { throw new TransactionRollbackException(error, e); }
                 finally { transactionContext.Rollback(); }
 
-                if (state.Error.IsTransient)
-                    throw new DbTransientException(state.Error);
-                return DbTransactionResult.Failure(state.Error);
+                if (error is ExceptionDbError exceptionDbError)
+                {
+                    if (exceptionDbError.Exception.GetTransientDbError() is { } transientException)
+                    {
+                        if (GetDbError(transientException) is null)
+                            AttachDbError(transientException, error);
+                        throw new TransactionTransientException(exceptionDbError.Message, transientException);
+                    }
+                }
+                return DbTransactionResult.Failure(error);
             }
             finally
             {
@@ -306,8 +344,15 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             ActionState state = await asyncAction();
             if (state.IsAborted)
             {
-                if (state.Error.IsTransient)
-                    throw new DbTransientException(state.Error);
+                if (state.Error is ExceptionDbError exceptionDbError)
+                {
+                    if (exceptionDbError.Exception.GetTransientDbError() is { } transientException)
+                    {
+                        if (GetDbError(transientException) is null)
+                            AttachDbError(transientException, state.Error);
+                        throw new TransactionTransientException(exceptionDbError.Message, transientException);
+                    }
+                }
                 return DbTransactionResult.Failure(state.Error);
             }
             uint affectedRows = TransactionContext.GetCurrent(DbContext.Database)?.AffectedRows ?? 0;
@@ -316,12 +361,6 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// Take care when using any non-efc logic, such as adding to lists, since the operations might be
-    /// repeated several times when the transaction is retried. Throws an exception if the call
-    /// is nested inside an active transaction and the exception itself is caused by transient error.
-    /// </remarks>
-    /// <exception cref="DbException">When transient error occurs in a nested call</exception>
     public ValueTask<DbTransactionResult> InTransactionAsync(Func<Task> asyncAction)
     {
         return InTransactionAsync(WrappedAction);
@@ -379,5 +418,17 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
             _loadedRepositories[key] = repository;
             return repository;
         }
+    }
+
+    private static void AttachDbError(Exception ex, IDbError error)
+    {
+        ex.Data["DbError"] = error;
+    }
+
+    private static IDbError? GetDbError(Exception ex)
+    {
+        if (ex.Data.Contains("DbError") && ex.Data["DbError"] is IDbError dbError)
+            return dbError;
+        return null;
     }
 }
