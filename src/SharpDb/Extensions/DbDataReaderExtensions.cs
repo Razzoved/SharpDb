@@ -356,6 +356,8 @@ public static class DbDataReaderExtensions
             return ConvertNoBox<float, T>(value);
         if (desiredType == typeof(long))
             return ConvertNoBox<long, T>(value);
+        if (desiredType == typeof(int))
+            return ConvertNoBox<int, T>(value);
         if (desiredType == typeof(ulong))
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
@@ -397,6 +399,8 @@ public static class DbDataReaderExtensions
             return ConvertNoBox<float, T>(value);
         if (desiredType == typeof(long))
             return ConvertNoBox<long, T>(value);
+        if (desiredType == typeof(int))
+            return ConvertNoBox<int, T>(value);
         if (desiredType == typeof(short))
             return ConvertNoBox<short, T>(value);
         if (desiredType == typeof(ulong))
