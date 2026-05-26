@@ -456,9 +456,9 @@ public static class DatabaseFacadeExtensions
         Func<(DatabaseFacade db, DbCommand cmd, TState state), Task<TResult>> commandAction)
         where TResult : IDbResult
     {
-        await using var command = CreateCommand(database);
         if (database.CurrentTransaction is not null)
         {
+            await using var command = CreateCommand(database);
             try
             {
                 TResult? result = await commandAction((database, command, state));
@@ -477,7 +477,12 @@ public static class DatabaseFacadeExtensions
         }
         else
         {
-            return await database.CreateExecutionStrategy().ExecuteAsync((database, command, state), commandAction);
+            var strategy = database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync((database, state, commandAction), static async (args) =>
+            {
+                await using var command = CreateCommand(args.database);
+                return await args.commandAction((args.database, command, args.state));
+            });
         }
     }
 }
