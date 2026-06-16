@@ -6,7 +6,7 @@ namespace SharpDb.EntityFrameworkCore.Extensions;
 
 public static class QueryableExtensions
 {
-    private static readonly ConcurrentDictionary<int, string[]> s_orderingCache = [];
+    private static readonly ConcurrentDictionary<Type, string[]> s_orderingCache = [];
 
     /// <summary>
     /// Orders the queryable by the primary key or first defined index of the entity type
@@ -19,7 +19,7 @@ public static class QueryableExtensions
     /// <exception cref="ArgumentException">When no key or index is defined</exception>
     public static IOrderedQueryable<TEntity> OrderByDefault<TEntity>(this IQueryable<TEntity> source, DbSet<TEntity> dbSet) where TEntity : class
     {
-        string[] keys = s_orderingCache.GetOrAdd(typeof(TEntity).GetHashCode(), GetDefaultOrderingNames, dbSet.EntityType);
+        string[] keys = s_orderingCache.GetOrAdd(typeof(TEntity), GetDefaultOrderingNames, dbSet.EntityType);
         if (keys.Length == 0)
             throw new ArgumentException("No primary key or index defined.", nameof(dbSet));
         IOrderedQueryable<TEntity>? orderedQuery = source.OrderBy(e => EF.Property<object>(e, keys[0]));
@@ -41,7 +41,7 @@ public static class QueryableExtensions
     /// <exception cref="ArgumentException">When no key or index is defined</exception>
     public static IOrderedQueryable<TEntity> OrderByDefaultDescending<TEntity>(this IQueryable<TEntity> source, DbSet<TEntity> dbSet) where TEntity : class
     {
-        string[] keys = s_orderingCache.GetOrAdd(typeof(TEntity).GetHashCode(), GetDefaultOrderingNames, dbSet.EntityType);
+        string[] keys = s_orderingCache.GetOrAdd(typeof(TEntity), GetDefaultOrderingNames, dbSet.EntityType);
         if (keys.Length == 0)
             throw new ArgumentException("No primary key or index defined.", nameof(dbSet));
         IOrderedQueryable<TEntity>? orderedQuery = source.OrderByDescending(e => EF.Property<object>(e, keys[0]));
@@ -52,7 +52,7 @@ public static class QueryableExtensions
         return orderedQuery;
     }
 
-    private static string[] GetDefaultOrderingNames(int cacheKey, IEntityType entityType)
+    private static string[] GetDefaultOrderingNames(Type cacheKey, IEntityType entityType)
     {
         var primaryKey = entityType.FindPrimaryKey()?.Properties;
         if (primaryKey is not null && primaryKey.Count > 0)

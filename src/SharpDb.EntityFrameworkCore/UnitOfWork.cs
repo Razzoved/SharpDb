@@ -15,7 +15,7 @@ namespace SharpDb.EntityFrameworkCore;
 /// <param name="dbContextFactory">Database context factory used to create a new owned context</param>
 public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContextFactory) : IUnitOfWork where TContext : DbContext
 {
-    private readonly Dictionary<int, object> _loadedRepositories = new(3);
+    private readonly Dictionary<Type, object> _loadedRepositories = new(3);
     private readonly object _loadedRepositoriesLock = new();
     private SqlRunner? _sql;
     private bool _disposed;
@@ -400,7 +400,7 @@ public abstract class UnitOfWork<TContext>(IDbContextFactory<TContext> dbContext
     {
         ArgumentNullException.ThrowIfNull(createRepository);
 
-        int key = typeof(TRepository).GetHashCode();
+        Type key = typeof(TRepository);
 
         // First try to get the repository without locking
         ref object value = ref CollectionsMarshal.GetValueRefOrNullRef(_loadedRepositories, key);
