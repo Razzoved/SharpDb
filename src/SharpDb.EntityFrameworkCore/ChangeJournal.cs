@@ -9,7 +9,7 @@ namespace SharpDb.EntityFrameworkCore;
 internal sealed class ChangeJournal : IChangeJournal
 {
     private readonly DbContext _db;
-    private readonly HashSet<object> _tracked = [];
+    private readonly HashSet<object> _tracked = new(ReferenceEqualityComparer.Instance);
     private readonly Stack<IOperation> _ops = [];
 
     private bool _stopped = true;
