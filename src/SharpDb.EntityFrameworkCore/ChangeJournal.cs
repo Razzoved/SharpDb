@@ -134,13 +134,12 @@ internal sealed class ChangeJournal : IChangeJournal
     {
         private readonly object _source;
         private readonly PropertyValues _currentValues;
-        private readonly Dictionary<string, (bool IsChanged, object? Value)> _changedValues;
+        private Dictionary<string, (bool IsChanged, object? Value)>? _changedValues;
 
         public PropertyRestoreOperation(EntityEntry entry)
         {
             _source = entry.Entity;
             _currentValues = entry.CurrentValues;
-            _changedValues = [];
             ((INotifyPropertyChanging)_source).PropertyChanging += OnPropertyChanging;
             ((INotifyPropertyChanged)_source).PropertyChanged += OnPropertyChanged;
         }
@@ -149,11 +148,14 @@ internal sealed class ChangeJournal : IChangeJournal
         {
             ((INotifyPropertyChanged)_source).PropertyChanged -= OnPropertyChanged;
             ((INotifyPropertyChanging)_source).PropertyChanging -= OnPropertyChanging;
-            foreach (var (propertyName, data) in _changedValues)
+            if (_changedValues is not null)
             {
-                if (data.IsChanged)
+                foreach (var (propertyName, data) in _changedValues)
                 {
-                    _currentValues[propertyName] = data.Value;
+                    if (data.IsChanged)
+                    {
+                        _currentValues[propertyName] = data.Value;
+                    }
                 }
             }
         }
@@ -163,11 +165,16 @@ internal sealed class ChangeJournal : IChangeJournal
             string? propertyName = e.PropertyName;
             if (!string.IsNullOrWhiteSpace(propertyName))
             {
-                ref var changedValue = ref CollectionsMarshal.GetValueRefOrNullRef(_changedValues, propertyName);
-                if (Unsafe.IsNullRef(ref changedValue))
+                if (_changedValues is not null)
                 {
-                    changedValue = (false, _currentValues[propertyName]);
+                    ref var changedValue = ref CollectionsMarshal.GetValueRefOrNullRef(_changedValues, propertyName);
+                    if (Unsafe.IsNullRef(ref changedValue))
+                    {
+                        changedValue = (false, _currentValues[propertyName]);
+                    }
+                    return;
                 }
+                _changedValues = new() { [propertyName] = (false, _currentValues[propertyName]) };
             }
         }
 
@@ -176,7 +183,7 @@ internal sealed class ChangeJournal : IChangeJournal
             string? propertyName = e.PropertyName;
             if (!string.IsNullOrWhiteSpace(propertyName))
             {
-                ref var changedValue = ref CollectionsMarshal.GetValueRefOrNullRef(_changedValues, propertyName);
+                ref var changedValue = ref CollectionsMarshal.GetValueRefOrNullRef(_changedValues!, propertyName);
                 if (!Unsafe.IsNullRef(ref changedValue))
                 {
                     changedValue = (true, changedValue.Value);
