@@ -7,7 +7,7 @@ namespace SharpDb.EntityFrameworkCore;
 
 internal sealed class TransactionContext : IDisposable
 {
-    private static readonly ConditionalWeakTable<IDbContextTransaction, AsyncLocal<ModifiableValue>> s_contexts = new();
+    private static readonly ConditionalWeakTable<IDbContextTransaction, AsyncLocal<ModifiableValue>> s_contexts = [];
 
     private readonly IDbContextTransaction _transaction;
     private readonly TransactionContext? _previous;
