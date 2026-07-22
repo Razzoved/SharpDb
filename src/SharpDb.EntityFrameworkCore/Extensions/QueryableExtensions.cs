@@ -1,71 +1,43 @@
-﻿using System.Collections.Concurrent;
+using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using SharpDb.Exceptions;
 
 namespace SharpDb.EntityFrameworkCore;
 
-public static class QueryableExtensions
+public static partial class QueryableExtensions
 {
-    private static readonly ConcurrentDictionary<Type, string[]> s_orderingCache = [];
-
-    /// <summary>
-    /// Orders the queryable by the primary key or first defined index of the entity type
-    /// in ascending manner. Alternatively use <see cref="OrderByDefaultDescending{TEntity}"/>.
-    /// </summary>
-    /// <typeparam name="TEntity">Entity type (should be part of EFC model)</typeparam>
-    /// <param name="source">What to order</param>
-    /// <param name="dbSet">Source of model info</param>
-    /// <returns>Ordered queryable</returns>
-    /// <exception cref="ArgumentException">When no key or index is defined</exception>
-    public static IOrderedQueryable<TEntity> OrderByDefault<TEntity>(this IQueryable<TEntity> source, DbSet<TEntity> dbSet) where TEntity : class
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static DbContext? GetDbContext<T>(IQueryable<T> query)
     {
-        string[] keys = s_orderingCache.GetOrAdd(typeof(TEntity), GetDefaultOrderingNames, dbSet.EntityType);
-        if (keys.Length == 0)
-            throw new ArgumentException("No primary key or index defined.", nameof(dbSet));
-        IOrderedQueryable<TEntity>? orderedQuery = source.OrderBy(e => EF.Property<object>(e, keys[0]));
-        for (int i = 1; i < keys.Length; i++)
-        {
-            orderedQuery = orderedQuery.ThenBy(e => EF.Property<object>(e, keys[i]));
-        }
-        return orderedQuery;
+        if (query is IInfrastructure<IServiceProvider> directInfrastructure)
+            return directInfrastructure.Instance.GetService<ICurrentDbContext>()?.Context;
+
+        Expression expression = query.Expression;
+        while (expression is MethodCallExpression methodCall)
+            expression = methodCall.Arguments[0]; // arguments[0] is always the source IQueryable
+        if (expression is UnaryExpression unary)
+            expression = unary.Operand;
+        if (expression is ConstantExpression { Value: IInfrastructure<IServiceProvider> rootInfrastructure })
+            return rootInfrastructure.Instance.GetService<ICurrentDbContext>()?.Context;
+
+        return null;
     }
 
-    /// <summary>
-    /// Orders the queryable by the primary key or first defined index of the entity type
-    /// in descending manner. Alternatively use <see cref="OrderByDefault{TEntity}"/>.
-    /// </summary>
-    /// <typeparam name="TEntity">Entity type (should be part of EFC model)</typeparam>
-    /// <param name="source">What to order</param>
-    /// <param name="dbSet">Source of model info</param>
-    /// <returns>Ordered queryable</returns>
-    /// <exception cref="ArgumentException">When no key or index is defined</exception>
-    public static IOrderedQueryable<TEntity> OrderByDefaultDescending<TEntity>(this IQueryable<TEntity> source, DbSet<TEntity> dbSet) where TEntity : class
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ThrowIfTransient<T>(IQueryable<T> query, Exception e)
     {
-        string[] keys = s_orderingCache.GetOrAdd(typeof(TEntity), GetDefaultOrderingNames, dbSet.EntityType);
-        if (keys.Length == 0)
-            throw new ArgumentException("No primary key or index defined.", nameof(dbSet));
-        IOrderedQueryable<TEntity>? orderedQuery = source.OrderByDescending(e => EF.Property<object>(e, keys[0]));
-        for (int i = 1; i < keys.Length; i++)
+        if (e is TransactionTransientException)
+            throw e;
+        try
         {
-            orderedQuery = orderedQuery.ThenByDescending(e => EF.Property<object>(e, keys[i]));
+            if (GetDbContext(query) is { } context
+                && TransactionContext.GetCurrent(context.Database) is not null
+                && e.HasTransientDbError())
+                throw new TransactionTransientException(e);
         }
-        return orderedQuery;
-    }
-
-    private static string[] GetDefaultOrderingNames(Type cacheKey, IEntityType entityType)
-    {
-        var primaryKey = entityType.FindPrimaryKey()?.Properties;
-        if (primaryKey is not null && primaryKey.Count > 0)
-        {
-            return [.. primaryKey.Select(x => x.Name)];
-        }
-        foreach (var index in entityType.GetIndexes())
-        {
-            if (index is not null && index.Properties.Count > 0)
-            {
-                return [.. index.Properties.Select(x => x.Name)];
-            }
-        }
-        return [];
+        catch { }
     }
 }
