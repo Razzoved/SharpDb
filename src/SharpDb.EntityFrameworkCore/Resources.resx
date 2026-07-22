@@ -144,4 +144,7 @@
   <data name="Text.Error.Repository.AttachNotSupported" xml:space="preserve">
     <value>The `{0}` repository ({1}) does not support `Attach` operation - IsUpdateEnabled == false.</value>
   </data>
+  <data name="Ordering_Undefined_PkOrIndex" xml:space="preserve">
+    <value>No primary key or index defined.</value>
+  </data>
 </root>

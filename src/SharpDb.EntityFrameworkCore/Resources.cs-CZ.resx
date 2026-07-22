@@ -144,4 +144,7 @@
   <data name="Text.Error.Repository.AttachNotSupported" xml:space="preserve">
     <value>Repositář `{0}` ({1}) nepodporuje operaci `Připojit` - IsUpdateEnabled == false.</value>
   </data>
+  <data name="Ordering_Undefined_PkOrIndex" xml:space="preserve">
+    <value>Není definován primární klíč ani index.</value>
+  </data>
 </root>
