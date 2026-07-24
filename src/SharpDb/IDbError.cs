@@ -11,6 +11,10 @@ public interface IDbError
 {
     string Message { get; }
 
+    IDbError Prefix(string message) => Set(string.IsNullOrWhiteSpace(Message) ? message : (message + " - " + Message));
+    IDbError Set(string message);
+    Exception ToException() => new(Message);
+
     static bool AreEqual(IDbError? a, IDbError? b)
     {
         if (ReferenceEquals(a, b)) return true;
@@ -28,6 +32,10 @@ public sealed class NoDbError : IDbError
 
     public string Message => string.Empty;
 
+    IDbError IDbError.Prefix(string message) => throw new NotSupportedException(nameof(NoDbError) + " message cannot be prefixed");
+    IDbError IDbError.Set(string message) => throw new NotSupportedException(nameof(NoDbError) + " message cannot be replaced");
+    Exception IDbError.ToException() => throw new NotSupportedException(nameof(NoDbError) + " cannot be cast to an exception");
+
     public override bool Equals([NotNullWhen(true)] object? obj) => obj is NoDbError;
     public override int GetHashCode() => typeof(NoDbError).GetHashCode();
     public override string ToString() => Message;
@@ -42,7 +50,10 @@ public sealed class NoDbError : IDbError
 /// </summary>
 public class StringDbError(string message) : IDbError
 {
-    public string Message { get; } = message;
+    public string Message { get; private set; } = message;
+
+    public StringDbError Set(string message) { Message = message; return this; }
+    IDbError IDbError.Set(string message) => Set(message);
 
     public override bool Equals([NotNullWhen(true)] object? obj) => obj is StringDbError other && Message == other.Message;
     public override int GetHashCode() => HashCode.Combine(typeof(StringDbError), Message);
@@ -65,8 +76,12 @@ public class ExceptionDbError(Exception exception) : IDbError
     }
 
     public Exception Exception { get; } = exception;
-    public string Message { get; } = exception.Message;
+    public string Message { get; private set; } = exception.Message;
     public bool IsTransient { get; private init; }
+
+    public ExceptionDbError Set(string message) { Message = message; return this; }
+    IDbError IDbError.Set(string message) => Set(message);
+    Exception IDbError.ToException() => string.Equals(Exception.Message, Message) ? Exception : new(Message, Exception);
 
     public override bool Equals([NotNullWhen(true)] object? obj) => obj is ExceptionDbError other && Exception.Equals(other.Exception) && IsTransient == other.IsTransient;
     public override int GetHashCode() => HashCode.Combine(typeof(ExceptionDbError), Exception, IsTransient);
