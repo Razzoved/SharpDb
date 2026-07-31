@@ -10,16 +10,17 @@ namespace SharpDb.EntityFrameworkCore.Repositories;
 /// <typeparam name="TEntity">Target entity type</typeparam>
 public abstract class Repository<TEntity> : IRepository<TEntity> where TEntity : class
 {
-    private DbSet<TEntity>? _set;
+    private readonly Lazy<DbSet<TEntity>> _set;
 
     protected Repository(DbContext context)
     {
-        ArgumentNullException.ThrowIfNull(context, nameof(context));
+        ArgumentNullException.ThrowIfNull(context);
         Context = context;
+        _set = new Lazy<DbSet<TEntity>>(context.Set<TEntity>);
     }
 
     protected DbContext Context { get; }
-    protected DbSet<TEntity> Set => _set ??= Context.Set<TEntity>();
+    protected DbSet<TEntity> Set => _set.Value;
 
     protected bool IsAddEnabled { private get; init; } = true;
     protected bool IsUpdateEnabled { private get; init; } = true;
