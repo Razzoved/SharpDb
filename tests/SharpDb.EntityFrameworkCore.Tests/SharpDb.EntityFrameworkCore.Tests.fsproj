@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Extensions\QueryableExtensionsTests.fs" />
     <Compile Include="Comparers\CollectionByValuesValueComparerTests.fs" />
     <Compile Include="Converters\Base64ToBase64AesEncryptConverterTests.fs" />
     <Compile Include="Converters\BinaryToBase64AesEncryptConverterTests.fs" />
