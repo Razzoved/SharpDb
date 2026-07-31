@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>8.3.2</Version>
+    <Version>8.4.0</Version>
     <Description>Library providing utilities/extensions for Microsoft.EntityFrameworkCore</Description>
     <Authors>Jan Martinek</Authors>
     <Keyword>sharpdb lib database data efc</Keyword>
@@ -20,6 +20,10 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReleaseNotes>
+      [8.4.0] - 2026-07-31
+      - Added support for CancellationToken to default repository
+      - Moved extensions to parent namespace for ease of use
+      - Added query extensions
       [8.3.2] - 2026-06-16
       - Fixed parameter duplication on query retry
       [8.3.1] - 2026-05-18
