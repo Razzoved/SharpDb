@@ -1,6 +1,6 @@
 ﻿using System.Data.Common;
 
-namespace SharpDb.Extensions;
+namespace SharpDb;
 
 public static class ExceptionExtensions
 {

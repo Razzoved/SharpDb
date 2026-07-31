@@ -1,6 +1,5 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
-using SharpDb.EntityFrameworkCore.Extensions;
 
 namespace SharpDb.EntityFrameworkCore.Repositories;
 

@@ -2,7 +2,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.EntityFrameworkCore;
 using SharpDb.Exceptions;
-using SharpDb.Extensions;
 
 namespace SharpDb.EntityFrameworkCore;
 
