@@ -1,9 +1,8 @@
 namespace SharpDb.Tests.Extensions
 
 open System
-open System.Data
 open System.Data.Common
-open SharpDb.Extensions
+open SharpDb
 open Xunit
 
 module DbDataReaderExtensionsTests =

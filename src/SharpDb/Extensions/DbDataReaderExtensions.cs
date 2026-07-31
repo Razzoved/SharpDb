@@ -1,7 +1,7 @@
 ﻿using System.Data.Common;
 using System.Runtime.CompilerServices;
 
-namespace SharpDb.Extensions;
+namespace SharpDb;
 
 public static class DbDataReaderExtensions
 {

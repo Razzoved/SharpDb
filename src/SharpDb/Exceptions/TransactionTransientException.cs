@@ -1,6 +1,5 @@
 ﻿using System.Data.Common;
 using System.Transactions;
-using SharpDb.Extensions;
 
 namespace SharpDb.Exceptions;
 

@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 
-namespace SharpDb.EntityFrameworkCore.Extensions;
+namespace SharpDb.EntityFrameworkCore;
 
 public static class QueryableExtensions
 {
