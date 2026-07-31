@@ -6,7 +6,6 @@ open Microsoft.EntityFrameworkCore
 open SharpDb
 open SharpDb.EntityFrameworkCore
 open System
-open System.Reflection
 open System.Threading.Tasks
 open Xunit
 
@@ -21,6 +20,7 @@ module UnitOfWorkSqlRunnerTransactionTests =
         [<DefaultValue>] val mutable DummyEntities : DbSet<DummyEntity>
         override _.OnModelCreating(modelBuilder: ModelBuilder) =
             modelBuilder.Entity<DummyEntity>().HasKey("Id") |> ignore
+            modelBuilder.Entity<DummyEntity>().HasIndex("Name").IsUnique(false).IsClustered(false) |> ignore
             modelBuilder.Entity<DummyEntity>().Property(fun e -> e.Id).ValueGeneratedOnAdd().HasColumnName("id") |> ignore
 
     type DummyUnitOfWork(ctxFactory: IDbContextFactory<DummyDbContext>) =
@@ -59,7 +59,14 @@ module UnitOfWorkSqlRunnerTransactionTests =
                 cmd.ExecuteNonQuery() |> ignore
         interface IDbContextFactory<DummyDbContext> with
             member _.CreateDbContext() =
-                let options = DbContextOptionsBuilder<DummyDbContext>().UseSqlServer(connStr, fun o -> o.EnableRetryOnFailure() |> ignore).EnableDetailedErrors().Options
+                let options =
+                    DbContextOptionsBuilder<DummyDbContext>().UseSqlServer(connStr, fun o ->
+                        o.EnableRetryOnFailure(
+                            maxRetryCount = 2,
+                            maxRetryDelay = TimeSpan.FromMilliseconds(50),
+                            errorNumbersToAdd = Seq.empty<int>
+                        ) |> ignore)
+                        .EnableDetailedErrors().Options
                 let ctx = new DummyDbContext(options)
                 if not created then
                     ctx.Database.EnsureCreated() |> ignore
@@ -173,41 +180,47 @@ module UnitOfWorkSqlRunnerTransactionTests =
         use uow1 = new DummyUnitOfWork(dbContextFactory)
         use uow2 = new DummyUnitOfWork(dbContextFactory)
 
-        let started1 = TaskCompletionSource<unit>(TaskCreationOptions.RunContinuationsAsynchronously)
-        let started2 = TaskCompletionSource<unit>(TaskCreationOptions.RunContinuationsAsynchronously)
-        let valueTask1 = uow1.InTransactionAsync(fun () -> task {
-            started1.TrySetResult(()) |> ignore
-            do! started2.Task
+        let mutable thread1Arrived = false
+        let mutable thread2Arrived = false
+
+        let vt1 = uow1.InTransactionAsync(fun () -> task {
             let! t1 = uow1.Sql.RawExecuteAsync("UPDATE DummyEntity SET Name = 'Locked1' WHERE Id = 1")
             if not t1.IsSuccess then
                 return ActionState.Abort(t1.Error)
             else
-                do! Task.Delay(1000)
+                thread1Arrived <- true
+                while not thread2Arrived do
+                    do! Async.Sleep(300)
                 let! t2 = uow1.Sql.RawExecuteAsync("UPDATE DummyEntity SET Name = 'Locked1' WHERE Id = 2")
                 if not t2.IsSuccess then
                     return ActionState.Abort(t2.Error)
                 else
                     return ActionState.Complete()
         })
-        let valueTask2 = uow2.InTransactionAsync(fun () -> task {
-            started2.TrySetResult(()) |> ignore
-            do! started1.Task
+
+        let vt2 = uow2.InTransactionAsync(fun () -> task {
             let! t1 = uow2.Sql.RawExecuteAsync("UPDATE DummyEntity SET Name = 'Locked2' WHERE Id = 2")
             if not t1.IsSuccess then
                 return ActionState.Abort(t1.Error)
             else
-                do! Task.Delay(1000)
+                thread2Arrived <- true
+                while not thread1Arrived do
+                    do! Async.Sleep(300)
                 let! t2 = uow2.Sql.RawExecuteAsync("UPDATE DummyEntity SET Name = 'Locked2' WHERE Id = 1")
                 if not t2.IsSuccess then
                     return ActionState.Abort(t2.Error)
                 else
                     return ActionState.Complete()
         })
-        let task1 = valueTask1.AsTask()
-        let task2 = valueTask2.AsTask()
-        let results = Task.WhenAll([|task1; task2|]) |> Async.AwaitTask |> Async.RunSynchronously
 
-        let res1, res2 = results[0], results[1]
+        let task1 = vt1.AsTask()
+        let task2 = vt2.AsTask()
+
+        Task.WhenAll(task1, task2) |> Async.AwaitTask |> Async.RunSynchronously |> ignore
+
+        let res1 = task1.Result
+        let res2 = task2.Result
+
         let err1 = if res1.IsSuccess then "" else res1.Error.Message
         let err2 = if res2.IsSuccess then "" else res2.Error.Message
 
