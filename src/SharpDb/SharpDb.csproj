@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>8.3.1</Version>
+    <Version>8.4.0</Version>
     <PackageId>SharpDb.Core</PackageId>
     <Description>Library providing core utilities for working with databases</Description>
     <Authors>Jan Martinek</Authors>
@@ -21,6 +21,9 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReleaseNotes>
+      [8.4.0] - 2026-07-31
+      - Moved extensions to parent namespace for ease of use
+      - Added error handling methods for IDbError
       [8.3.1] - 2026-05-18
       - Reworked transaction exceptions from DbException to TransactionException for clarity
       [8.3.0] - 2026-05-13
