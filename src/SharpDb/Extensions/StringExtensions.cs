@@ -1,4 +1,4 @@
-﻿namespace SharpDb.Extensions;
+﻿namespace SharpDb;
 
 public static class StringExtensions
 {
