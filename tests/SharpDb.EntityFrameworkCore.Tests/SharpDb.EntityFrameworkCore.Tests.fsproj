@@ -15,6 +15,10 @@
     <Compile Include="Converters\BinaryToBase64AesEncryptConverterTests.fs" />
     <Compile Include="Converters\BinaryToBinaryAesEncryptConverterTests.fs" />
     <Compile Include="Converters\PlaintextToBase64AesEncryptConverterTests.fs" />
+    <Compile Include="Converters\DbDateTimeConverterTests.fs" />
+    <Compile Include="Converters\DbMoneyConverterTests.fs" />
+    <Compile Include="Converters\DbSmallDateTimeConverterTests.fs" />
+    <Compile Include="Converters\DbSmallMoneyConverterTests.fs" />
     <Compile Include="DatabaseFacadeExtensionsTests.fs" />
     <Compile Include="ModelBuilderExtensionsTests.fs" />
     <Compile Include="UnitOfWorkSqlRunnerTransactionTests.fs" />
