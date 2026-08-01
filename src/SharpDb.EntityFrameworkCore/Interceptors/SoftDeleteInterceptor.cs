@@ -26,19 +26,26 @@ public sealed class SoftDeleteInterceptor(IDateTimeService dateTimeService) : Sa
         {
             foreach (var entry in eventData.Context.ChangeTracker.Entries<ISoftDelete>())
             {
+                const string propertyName = nameof(ISoftDelete.DeletedAt);
                 switch (entry.State)
                 {
                     case EntityState.Modified:
-                        if (entry.OriginalValues.GetValue<DateTime?>(nameof(ISoftDelete.DeletedAt)).HasValue
-                            && !entry.CurrentValues.GetValue<DateTime?>(nameof(ISoftDelete.DeletedAt)).HasValue)
                         {
-                            entry.Entity.DeletedAt = null;
+                            var original = (DateTime?)entry.OriginalValues[propertyName];
+                            if (original.HasValue)
+                            {
+                                entry.Entity.DeletedAt = entry.Entity.DeletedAt.HasValue
+                                    ? original.Value
+                                    : null;
+                            }
                         }
                         break;
                     case EntityState.Deleted:
-                        if (!entry.OriginalValues.GetValue<DateTime?>(nameof(ISoftDelete.DeletedAt)).HasValue)
                         {
-                            entry.Entity.DeletedAt = dateTimeService.Now.DateTime;
+                            if (!entry.OriginalValues.GetValue<DateTime?>(propertyName).HasValue)
+                            {
+                                entry.Entity.DeletedAt = dateTimeService.Now.DateTime;
+                            }
                         }
                         break;
                     default:
