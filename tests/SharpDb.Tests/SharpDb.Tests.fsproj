@@ -19,6 +19,7 @@
     <Compile Include="ContextBasedUserServiceTests.fs" />
     <Compile Include="DbConnectionInfoTests.fs" />
     <Compile Include="DbParameterTests.fs" />
+    <Compile Include="IDbErrorTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
