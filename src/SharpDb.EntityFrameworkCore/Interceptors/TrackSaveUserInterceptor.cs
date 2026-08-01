@@ -46,6 +46,10 @@ public sealed class TrackSaveUserInterceptor(IUserService userService) : SaveCha
                 {
                     entry.Entity.DeletedByUser ??= user;
                 }
+                else
+                {
+                    entry.Entity.DeletedByUser = null;
+                }
             }
         }
         return result;
