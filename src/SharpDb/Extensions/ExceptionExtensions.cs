@@ -11,7 +11,7 @@ public static class ExceptionExtensions
         {
             if (currentException is DbException dbException && IsTransient(dbException))
                 return true;
-            currentException = exception.InnerException;
+            currentException = currentException.InnerException;
         }
         return false;
     }
@@ -23,7 +23,7 @@ public static class ExceptionExtensions
         {
             if (currentException is DbException dbException && IsTransient(dbException))
                 return dbException;
-            currentException = exception.InnerException;
+            currentException = currentException.InnerException;
         }
         return null;
     }
@@ -32,7 +32,7 @@ public static class ExceptionExtensions
         => result.IsSuccess ? result : throw result.Error.ToException();
 
     public static TResult ThrowIfFailed<TResult>(this TResult result, Func<IDbError, IDbError> apply) where TResult : IDbResult
-        => result.IsSuccess || (apply(result.Error) is { } error && error is NoDbError) ? result : throw apply(result.Error).ToException();
+        => result.IsSuccess || apply(result.Error) is NoDbError ? result : throw apply(result.Error).ToException();
 
     public static Task<TResult> ThrowIfFailed<TResult>(this Task<TResult> result) where TResult : IDbResult
     {
@@ -40,10 +40,9 @@ public static class ExceptionExtensions
         {
             if (task.IsCompletedSuccessfully)
                 return task.Result.ThrowIfFailed();
-            else if (task.IsFaulted && task.Exception is not null)
-                throw task.Exception;
-            else
-                throw new Exception("An error occurred during asynchronous operation.");
+            if (task is { IsFaulted: true, Exception: not null })
+                throw task.Exception.Flatten().GetBaseException();
+            throw new Exception("An error occurred during asynchronous operation.");
         }, TaskContinuationOptions.ExecuteSynchronously);
     }
 
@@ -53,10 +52,9 @@ public static class ExceptionExtensions
         {
             if (task.IsCompletedSuccessfully)
                 return task.Result.ThrowIfFailed(apply);
-            else if (task.IsFaulted && task.Exception is not null)
-                throw task.Exception;
-            else
-                throw new Exception("An error occurred during asynchronous operation.");
+            if (task is { IsFaulted: true, Exception: not null })
+                throw task.Exception.Flatten().GetBaseException();
+            throw new Exception("An error occurred during asynchronous operation.");
         }, TaskContinuationOptions.ExecuteSynchronously);
     }
 
