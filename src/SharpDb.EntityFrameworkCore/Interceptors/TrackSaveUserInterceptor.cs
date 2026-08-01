@@ -1,6 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using SharpDb.Entities;
 using SharpDb.EntityFrameworkCore.Entities;
 using SharpDb.Services;
 
@@ -29,10 +28,7 @@ public sealed class TrackSaveUserInterceptor(IUserService userService) : SaveCha
             {
                 if (entry.State == EntityState.Added)
                 {
-                    if (entry.Entity.CreatedByUser is null)
-                    {
-                        entry.Entity.CreatedByUser = user;
-                    }
+                    entry.Entity.CreatedByUser ??= user;
                 }
             }
             // Handle updated objects
@@ -40,10 +36,7 @@ public sealed class TrackSaveUserInterceptor(IUserService userService) : SaveCha
             {
                 if (entry.State == EntityState.Modified)
                 {
-                    if (entry.Entity.UpdatedByUser is null)
-                    {
-                        entry.Entity.UpdatedByUser = user;
-                    }
+                    entry.Entity.UpdatedByUser = user;
                 }
             }
             // Handle deleted objects
@@ -51,10 +44,7 @@ public sealed class TrackSaveUserInterceptor(IUserService userService) : SaveCha
             {
                 if (entry.State == EntityState.Deleted || entry is { State: EntityState.Modified, Entity.IsDeleted: true })
                 {
-                    if (entry.Entity.DeletedByUser is null)
-                    {
-                        entry.Entity.DeletedByUser = user;
-                    }
+                    entry.Entity.DeletedByUser ??= user;
                 }
             }
         }
