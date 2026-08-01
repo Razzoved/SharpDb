@@ -9,7 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Extensions\QueryableExtensionsTests.fs" />
     <Compile Include="Comparers\CollectionByValuesValueComparerTests.fs" />
     <Compile Include="Converters\Base64ToBase64AesEncryptConverterTests.fs" />
     <Compile Include="Converters\BinaryToBase64AesEncryptConverterTests.fs" />
@@ -19,6 +18,10 @@
     <Compile Include="Converters\DbMoneyConverterTests.fs" />
     <Compile Include="Converters\DbSmallDateTimeConverterTests.fs" />
     <Compile Include="Converters\DbSmallMoneyConverterTests.fs" />
+    <Compile Include="Extensions\QueryableExtensionsTests.fs" />
+    <Compile Include="Interceptors\SoftDeleteInterceptorTests.fs" />
+    <Compile Include="Interceptors\TrackSaveTimeInterceptorTests.fs" />
+    <Compile Include="Interceptors\TrackSaveUserInterceptorTests.fs" />
     <Compile Include="DatabaseFacadeExtensionsTests.fs" />
     <Compile Include="ModelBuilderExtensionsTests.fs" />
     <Compile Include="UnitOfWorkSqlRunnerTransactionTests.fs" />
