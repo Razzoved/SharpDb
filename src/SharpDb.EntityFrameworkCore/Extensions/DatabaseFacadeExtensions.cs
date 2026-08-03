@@ -1,5 +1,4 @@
 ﻿using System.Data.Common;
-using System.Text;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using SharpDb.EntityFrameworkCore.Queries;
 
@@ -66,55 +65,6 @@ public static class DatabaseFacadeExtensions
         => AdoNetMethods.StoredProcedureManyAsync(database, procedureName, reader, cancellation, SqlStoredProcedureTimeout, parameters);
 
     public static ValueTask<DbExecResult> StoredProcedureExecuteAsync(this DatabaseFacade database, string procedureName, params DbParameter[] parameters)
-    public static string GetSqlCommandText(this FormattableString sql)
-    {
-        object?[] args = sql.GetArguments();
-        if (args.Length == 0) return sql.Format;
-
-        ReadOnlySpan<char> sqlSpan = sql.Format.AsSpan();
-        StringBuilder sqlBuilder = new();
-        int parameterIndex = 0;
-
-        while (!sqlSpan.IsEmpty)
-        {
-            int index = sqlSpan.IndexOf('{');
-
-            // Add everything before the next '{'
-            if (index < 0)
-            {
-                sqlBuilder.Append(sqlSpan);
-                sqlSpan = [];
-                continue;
-            }
-            sqlBuilder.Append(sqlSpan[0..index]);
-            sqlSpan = sqlSpan[index..];
-
-            // Format parameter (or just add string if it's not parameter)
-            if (!sqlSpan.StartsWith('{' + parameterIndex.ToString() + '}'))
-            {
-                sqlBuilder.Append('{');
-                sqlSpan = sqlSpan[1..];
-                continue;
-            }
-            sqlBuilder.Append($"@p{parameterIndex}");
-            sqlSpan = sqlSpan[(2 + parameterIndex.ToString().Length)..];
-            parameterIndex++;
-        }
-
-        return sqlBuilder.ToString();
-    }
-
-    public static DbParameter[] GetSqlCommandParameters(this FormattableString sql)
-    {
-        object?[] args = sql.GetArguments();
-        DbParameter[] parameters = new DbParameter[args.Length];
-        for (int i = 0; i < args.Length; i++)
-        {
-            parameters[i] = new DbParameter($"@p{i}", args[i] ?? DBNull.Value);
-        }
-        return parameters;
-    }
-
         => AdoNetMethods.StoredProcedureExecuteAsync(database, procedureName, CancellationToken.None, SqlStoredProcedureTimeout, parameters);
 
     public static ValueTask<DbExecResult> StoredProcedureExecuteAsync(this DatabaseFacade database, string procedureName, CancellationToken cancellation, params DbParameter[] parameters)
