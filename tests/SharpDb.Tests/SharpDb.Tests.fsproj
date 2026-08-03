@@ -18,6 +18,7 @@
     <Compile Include="Extensions\DbDataReaderExtensionsTests.fs" />
     <Compile Include="Extensions\ExceptionExtensionsTests.fs" />
     <Compile Include="Extensions\StringExtensionsTests.fs" />
+    <Compile Include="Extensions\FormattableStringExtensionsTest.fs" />
     <Compile Include="ActionStateTests.fs" />
     <Compile Include="ContextBasedUserServiceTests.fs" />
     <Compile Include="DbConnectionInfoTests.fs" />
