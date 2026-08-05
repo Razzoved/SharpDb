@@ -9,12 +9,12 @@ public static partial class QueryableExtensions
     #region Single(OrDefault)
 
     public static Task<DbQueryResult<T>> SingleAsyncResult<T>(this IQueryable<T> query, CancellationToken cancellation = default)
-        => SingleAsyncResultCore(query, null, cancellation);
+        => query.SingleAsyncResultCore(null, cancellation);
 
     public static Task<DbQueryResult<T>> SingleAsyncResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate, CancellationToken cancellation = default)
-        => SingleAsyncResultCore(query, predicate, cancellation);
+        => query.SingleAsyncResultCore(predicate, cancellation);
 
-    private static async Task<DbQueryResult<T>> SingleAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null, CancellationToken cancellation = default)
+    private static async Task<DbQueryResult<T>> SingleAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate, CancellationToken cancellation)
     {
         try
         {
@@ -31,12 +31,12 @@ public static partial class QueryableExtensions
     }
 
     public static Task<DbQueryResult<T?>> SingleOrDefaultAsyncResult<T>(this IQueryable<T> query, CancellationToken cancellation = default)
-        => SingleOrDefaultAsyncResultCore(query, null, cancellation);
+        => query.SingleOrDefaultAsyncResultCore(null, cancellation);
 
     public static Task<DbQueryResult<T?>> SingleOrDefaultAsyncResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate, CancellationToken cancellation = default)
-        => SingleOrDefaultAsyncResultCore(query, predicate, cancellation);
+        => query.SingleOrDefaultAsyncResultCore(predicate, cancellation);
 
-    private static async Task<DbQueryResult<T?>> SingleOrDefaultAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null, CancellationToken cancellation = default)
+    private static async Task<DbQueryResult<T?>> SingleOrDefaultAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate, CancellationToken cancellation)
     {
         try
         {
@@ -57,12 +57,12 @@ public static partial class QueryableExtensions
     #region First(OrDefault)
 
     public static Task<DbQueryResult<T>> FirstAsyncResult<T>(this IQueryable<T> query, CancellationToken cancellation = default)
-        => FirstAsyncResultCore(query, null, cancellation);
+        => query.FirstAsyncResultCore(null, cancellation);
 
     public static Task<DbQueryResult<T>> FirstAsyncResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate, CancellationToken cancellation = default)
-        => FirstAsyncResultCore(query, predicate, cancellation);
+        => query.FirstAsyncResultCore(predicate, cancellation);
 
-    private static async Task<DbQueryResult<T>> FirstAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null, CancellationToken cancellation = default)
+    private static async Task<DbQueryResult<T>> FirstAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate, CancellationToken cancellation)
     {
         try
         {
@@ -79,12 +79,12 @@ public static partial class QueryableExtensions
     }
 
     public static Task<DbQueryResult<T?>> FirstOrDefaultAsyncResult<T>(this IQueryable<T> query, CancellationToken cancellation = default)
-        => FirstOrDefaultAsyncResultCore(query, null, cancellation);
+        => query.FirstOrDefaultAsyncResultCore(null, cancellation);
 
     public static Task<DbQueryResult<T?>> FirstOrDefaultAsyncResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate, CancellationToken cancellation = default)
-        => FirstOrDefaultAsyncResultCore(query, predicate, cancellation);
+        => query.FirstOrDefaultAsyncResultCore(predicate, cancellation);
 
-    private static async Task<DbQueryResult<T?>> FirstOrDefaultAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null, CancellationToken cancellation = default)
+    private static async Task<DbQueryResult<T?>> FirstOrDefaultAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate, CancellationToken cancellation)
     {
         try
         {
@@ -105,12 +105,12 @@ public static partial class QueryableExtensions
     #region Last(OrDefault)
 
     public static Task<DbQueryResult<T>> LastAsyncResult<T>(this IQueryable<T> query, CancellationToken cancellation = default)
-        => LastAsyncResultCore(query, null, cancellation);
+        => query.LastAsyncResultCore(null, cancellation);
 
     public static Task<DbQueryResult<T>> LastAsyncResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate, CancellationToken cancellation = default)
-        => LastAsyncResultCore(query, predicate, cancellation);
+        => query.LastAsyncResultCore(predicate, cancellation);
 
-    private static async Task<DbQueryResult<T>> LastAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null, CancellationToken cancellation = default)
+    private static async Task<DbQueryResult<T>> LastAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate, CancellationToken cancellation)
     {
         try
         {
@@ -127,12 +127,12 @@ public static partial class QueryableExtensions
     }
 
     public static Task<DbQueryResult<T?>> LastOrDefaultAsyncResult<T>(this IQueryable<T> query, CancellationToken cancellation = default)
-        => LastOrDefaultAsyncResultCore(query, null, cancellation);
+        => query.LastOrDefaultAsyncResultCore(null, cancellation);
 
     public static Task<DbQueryResult<T?>> LastOrDefaultAsyncResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate, CancellationToken cancellation = default)
-        => LastOrDefaultAsyncResultCore(query, predicate, cancellation);
+        => query.LastOrDefaultAsyncResultCore(predicate, cancellation);
 
-    private static async Task<DbQueryResult<T?>> LastOrDefaultAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null, CancellationToken cancellation = default)
+    private static async Task<DbQueryResult<T?>> LastOrDefaultAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate, CancellationToken cancellation)
     {
         try
         {
@@ -179,23 +179,23 @@ public static partial class QueryableExtensions
     #region ToDictionary
 
     public static Task<DbQueryResult<Dictionary<TKey, T>>> ToDictionaryAsyncResult<T, TKey>(IQueryable<T> query, Func<T, TKey> keySelector, CancellationToken cancellation = default) where TKey : notnull
-        => ToDictionaryAsyncResultCore(query, keySelector, null, null, cancellation);
+        => query.ToDictionaryAsyncResultCore(keySelector, null, null, cancellation);
 
     public static Task<DbQueryResult<Dictionary<TKey, T>>> ToDictionaryAsyncResult<T, TKey>(IQueryable<T> query, Func<T, TKey> keySelector, Func<T, T> elementSelector, CancellationToken cancellation = default) where TKey : notnull
-        => ToDictionaryAsyncResultCore(query, keySelector, elementSelector, null, cancellation);
+        => query.ToDictionaryAsyncResultCore(keySelector, elementSelector, null, cancellation);
 
     public static Task<DbQueryResult<Dictionary<TKey, T>>> ToDictionaryAsyncResult<T, TKey>(IQueryable<T> query, Func<T, TKey> keySelector, IEqualityComparer<TKey> comparer, CancellationToken cancellation = default) where TKey : notnull
-        => ToDictionaryAsyncResultCore(query, keySelector, null, comparer, cancellation);
+        => query.ToDictionaryAsyncResultCore(keySelector, null, comparer, cancellation);
 
     public static Task<DbQueryResult<Dictionary<TKey, T>>> ToDictionaryAsyncResult<T, TKey>(IQueryable<T> query, Func<T, TKey> keySelector, Func<T, T> elementSelector, IEqualityComparer<TKey> comparer, CancellationToken cancellation = default) where TKey : notnull
-        => ToDictionaryAsyncResultCore(query, keySelector, elementSelector, comparer, cancellation);
+        => query.ToDictionaryAsyncResultCore(keySelector, elementSelector, comparer, cancellation);
 
     private static async Task<DbQueryResult<Dictionary<TKey, T>>> ToDictionaryAsyncResultCore<T, TKey>(
         this IQueryable<T> query,
         Func<T, TKey> keySelector,
-        Func<T, T>? elementSelector = null,
-        IEqualityComparer<TKey>? comparer = null,
-        CancellationToken cancellation = default) where TKey : notnull
+        Func<T, T>? elementSelector,
+        IEqualityComparer<TKey>? comparer,
+        CancellationToken cancellation) where TKey : notnull
     {
         try
         {
@@ -220,12 +220,12 @@ public static partial class QueryableExtensions
     #region Count
 
     public static Task<DbQueryResult<int>> CountAsyncResult<T>(this IQueryable<T> query, CancellationToken cancellation = default)
-        => CountAsyncResultCore(query, null, cancellation);
+        => query.CountAsyncResultCore(null, cancellation);
 
     public static Task<DbQueryResult<int>> CountAsyncResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate, CancellationToken cancellation = default)
-        => CountAsyncResultCore(query, predicate, cancellation);
+        => query.CountAsyncResultCore(predicate, cancellation);
 
-    private static async Task<DbQueryResult<int>> CountAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null, CancellationToken cancellation = default)
+    private static async Task<DbQueryResult<int>> CountAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate, CancellationToken cancellation)
     {
         try
         {
@@ -242,12 +242,12 @@ public static partial class QueryableExtensions
     }
 
     public static Task<DbQueryResult<long>> LongCountAsyncResult<T>(this IQueryable<T> query, CancellationToken cancellation = default)
-        => LongCountAsyncResultCore(query, null, cancellation);
+        => query.LongCountAsyncResultCore(null, cancellation);
 
     public static Task<DbQueryResult<long>> LongCountAsyncResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate, CancellationToken cancellation = default)
-        => LongCountAsyncResultCore(query, predicate, cancellation);
+        => query.LongCountAsyncResultCore(predicate, cancellation);
 
-    private static async Task<DbQueryResult<long>> LongCountAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null, CancellationToken cancellation = default)
+    private static async Task<DbQueryResult<long>> LongCountAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate, CancellationToken cancellation)
     {
         try
         {
@@ -268,12 +268,12 @@ public static partial class QueryableExtensions
     #region Any
 
     public static Task<DbQueryResult<bool>> AnyAsyncResult<T>(this IQueryable<T> query, CancellationToken cancellation = default)
-        => AnyAsyncResultCore(query, null, cancellation);
+        => query.AnyAsyncResultCore(null, cancellation);
 
     public static Task<DbQueryResult<bool>> AnyAsyncResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate, CancellationToken cancellation = default)
-        => AnyAsyncResultCore(query, predicate, cancellation);
+        => query.AnyAsyncResultCore(predicate, cancellation);
 
-    private static async Task<DbQueryResult<bool>> AnyAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null, CancellationToken cancellation = default)
+    private static async Task<DbQueryResult<bool>> AnyAsyncResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate, CancellationToken cancellation)
     {
         try
         {

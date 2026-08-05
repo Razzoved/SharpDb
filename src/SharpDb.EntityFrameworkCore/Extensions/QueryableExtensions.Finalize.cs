@@ -9,12 +9,12 @@ public static partial class QueryableExtensions
     #region Single(OrDefault)
 
     public static DbQueryResult<T> SingleResult<T>(this IQueryable<T> query)
-        => SingleResultCore(query, null);
+        => query.SingleResultCore(null);
 
     public static DbQueryResult<T> SingleResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate)
-        => SingleResultCore(query, predicate);
+        => query.SingleResultCore(predicate);
 
-    private static DbQueryResult<T> SingleResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null)
+    private static DbQueryResult<T> SingleResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate)
     {
         try
         {
@@ -30,12 +30,12 @@ public static partial class QueryableExtensions
     }
 
     public static DbQueryResult<T?> SingleOrDefaultResult<T>(this IQueryable<T> query)
-        => SingleOrDefaultResultCore(query, null);
+        => query.SingleOrDefaultResultCore(null);
 
     public static DbQueryResult<T?> SingleOrDefaultResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate)
-        => SingleOrDefaultResultCore(query, predicate);
+        => query.SingleOrDefaultResultCore(predicate);
 
-    private static DbQueryResult<T?> SingleOrDefaultResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null)
+    private static DbQueryResult<T?> SingleOrDefaultResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate)
     {
         try
         {
@@ -55,12 +55,12 @@ public static partial class QueryableExtensions
     #region First(OrDefault)
 
     public static DbQueryResult<T> FirstResult<T>(this IQueryable<T> query)
-        => FirstResultCore(query, null);
+        => query.FirstResultCore(null);
 
     public static DbQueryResult<T> FirstResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate)
-        => FirstResultCore(query, predicate);
+        => query.FirstResultCore(predicate);
 
-    private static DbQueryResult<T> FirstResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null)
+    private static DbQueryResult<T> FirstResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate)
     {
         try
         {
@@ -76,12 +76,12 @@ public static partial class QueryableExtensions
     }
 
     public static DbQueryResult<T?> FirstOrDefaultResult<T>(this IQueryable<T> query)
-        => FirstOrDefaultResultCore(query, null);
+        => query.FirstOrDefaultResultCore(null);
 
     public static DbQueryResult<T?> FirstOrDefaultResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate)
-        => FirstOrDefaultResultCore(query, predicate);
+        => query.FirstOrDefaultResultCore(predicate);
 
-    private static DbQueryResult<T?> FirstOrDefaultResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null)
+    private static DbQueryResult<T?> FirstOrDefaultResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate)
     {
         try
         {
@@ -101,12 +101,12 @@ public static partial class QueryableExtensions
     #region Last(OrDefault)
 
     public static DbQueryResult<T> LastResult<T>(this IQueryable<T> query)
-        => LastResultCore(query, null);
+        => query.LastResultCore(null);
 
     public static DbQueryResult<T> LastResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate)
-        => LastResultCore(query, predicate);
+        => query.LastResultCore(predicate);
 
-    private static DbQueryResult<T> LastResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null)
+    private static DbQueryResult<T> LastResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate)
     {
         try
         {
@@ -122,12 +122,12 @@ public static partial class QueryableExtensions
     }
 
     public static DbQueryResult<T?> LastOrDefaultResult<T>(this IQueryable<T> query)
-        => LastOrDefaultResultCore(query, null);
+        => query.LastOrDefaultResultCore(null);
 
     public static DbQueryResult<T?> LastOrDefaultResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate)
-        => LastOrDefaultResultCore(query, predicate);
+        => query.LastOrDefaultResultCore(predicate);
 
-    private static DbQueryResult<T?> LastOrDefaultResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null)
+    private static DbQueryResult<T?> LastOrDefaultResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate)
     {
         try
         {
@@ -173,12 +173,12 @@ public static partial class QueryableExtensions
     #region ToHashSet
 
     public static DbQueryResult<HashSet<T>> ToHashSetResult<T>(this IQueryable<T> query)
-        => ToHashSetResultCore(query, null);
+        => query.ToHashSetResultCore(null);
 
     public static DbQueryResult<HashSet<T>> ToHashSetResult<T>(this IQueryable<T> query, IEqualityComparer<T> comparer)
-        => ToHashSetResultCore(query, comparer);
+        => query.ToHashSetResultCore(comparer);
 
-    private static DbQueryResult<HashSet<T>> ToHashSetResultCore<T>(this IQueryable<T> query, IEqualityComparer<T>? comparer = null)
+    private static DbQueryResult<HashSet<T>> ToHashSetResultCore<T>(this IQueryable<T> query, IEqualityComparer<T>? comparer)
     {
         try
         {
@@ -195,23 +195,23 @@ public static partial class QueryableExtensions
 
     #region ToDictionary
 
-    public static Task<DbQueryResult<Dictionary<TKey, T>>> ToDictionaryResult<T, TKey>(IQueryable<T> query, Func<T, TKey> keySelector) where TKey : notnull
-        => ToDictionaryResultCore(query, keySelector, null, null);
+    public static DbQueryResult<Dictionary<TKey, T>> ToDictionaryResult<T, TKey>(IQueryable<T> query, Func<T, TKey> keySelector) where TKey : notnull
+        => query.ToDictionaryResultCore(keySelector, null, null);
 
-    public static Task<DbQueryResult<Dictionary<TKey, T>>> ToDictionaryResult<T, TKey>(IQueryable<T> query, Func<T, TKey> keySelector, Func<T, T> elementSelector) where TKey : notnull
-        => ToDictionaryResultCore(query, keySelector, elementSelector, null);
+    public static DbQueryResult<Dictionary<TKey, T>> ToDictionaryResult<T, TKey>(IQueryable<T> query, Func<T, TKey> keySelector, Func<T, T> elementSelector) where TKey : notnull
+        => query.ToDictionaryResultCore(keySelector, elementSelector, null);
 
-    public static Task<DbQueryResult<Dictionary<TKey, T>>> ToDictionaryResult<T, TKey>(IQueryable<T> query, Func<T, TKey> keySelector, IEqualityComparer<TKey> comparer) where TKey : notnull
-        => ToDictionaryResultCore(query, keySelector, null, comparer);
+    public static DbQueryResult<Dictionary<TKey, T>> ToDictionaryResult<T, TKey>(IQueryable<T> query, Func<T, TKey> keySelector, IEqualityComparer<TKey> comparer) where TKey : notnull
+        => query.ToDictionaryResultCore(keySelector, null, comparer);
 
-    public static Task<DbQueryResult<Dictionary<TKey, T>>> ToDictionaryResult<T, TKey>(IQueryable<T> query, Func<T, TKey> keySelector, Func<T, T> elementSelector, IEqualityComparer<TKey> comparer) where TKey : notnull
-        => ToDictionaryResultCore(query, keySelector, elementSelector, comparer);
+    public static DbQueryResult<Dictionary<TKey, T>> ToDictionaryResult<T, TKey>(IQueryable<T> query, Func<T, TKey> keySelector, Func<T, T> elementSelector, IEqualityComparer<TKey> comparer) where TKey : notnull
+        => query.ToDictionaryResultCore(keySelector, elementSelector, comparer);
 
-    private static async Task<DbQueryResult<Dictionary<TKey, T>>> ToDictionaryResultCore<T, TKey>(
+    private static DbQueryResult<Dictionary<TKey, T>> ToDictionaryResultCore<T, TKey>(
         this IQueryable<T> query,
         Func<T, TKey> keySelector,
-        Func<T, T>? elementSelector = null,
-        IEqualityComparer<TKey>? comparer = null) where TKey : notnull
+        Func<T, T>? elementSelector,
+        IEqualityComparer<TKey>? comparer) where TKey : notnull
     {
         try
         {
@@ -235,12 +235,12 @@ public static partial class QueryableExtensions
     #region Count
 
     public static DbQueryResult<int> CountResult<T>(this IQueryable<T> query)
-        => CountResultCore(query, null);
+        => query.CountResultCore(null);
 
     public static DbQueryResult<int> CountResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate)
-        => CountResultCore(query, predicate);
+        => query.CountResultCore(predicate);
 
-    private static DbQueryResult<int> CountResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null)
+    private static DbQueryResult<int> CountResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate)
     {
         try
         {
@@ -254,12 +254,12 @@ public static partial class QueryableExtensions
     }
 
     public static DbQueryResult<long> LongCountResult<T>(this IQueryable<T> query)
-        => LongCountResultCore(query, null);
+        => query.LongCountResultCore(null);
 
     public static DbQueryResult<long> LongCountResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate)
-        => LongCountResultCore(query, predicate);
+        => query.LongCountResultCore(predicate);
 
-    private static DbQueryResult<long> LongCountResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null)
+    private static DbQueryResult<long> LongCountResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate)
     {
         try
         {
@@ -277,12 +277,12 @@ public static partial class QueryableExtensions
     #region Any
 
     public static DbQueryResult<bool> AnyResult<T>(this IQueryable<T> query)
-        => AnyResultCore(query, null);
+        => query.AnyResultCore(null);
 
     public static DbQueryResult<bool> AnyResult<T>(this IQueryable<T> query, Expression<Func<T, bool>> predicate)
-        => AnyResultCore(query, predicate);
+        => query.AnyResultCore(predicate);
 
-    private static DbQueryResult<bool> AnyResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate = null)
+    private static DbQueryResult<bool> AnyResultCore<T>(this IQueryable<T> query, Expression<Func<T, bool>>? predicate)
     {
         try
         {
