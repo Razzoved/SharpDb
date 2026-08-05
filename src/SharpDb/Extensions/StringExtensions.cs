@@ -1,11 +1,9 @@
-﻿namespace SharpDb;
+﻿using System.Runtime.CompilerServices;
+
+namespace SharpDb;
 
 public static class StringExtensions
 {
-    private const char BeginSlComment = '-';
-    private const char BeginMlComment = '/';
-    private const char BeginString = '\'';
-
     /// <summary>
     /// Tries to extract a single SQL query from a string of queries, identified by a specific tag.
     /// </summary>
@@ -15,79 +13,86 @@ public static class StringExtensions
     /// <exception cref="InvalidOperationException"></exception>
     public static ReadOnlySpan<char> GetSingleQuery(this ReadOnlySpan<char> queries, ReadOnlySpan<char> querySelectorTag)
     {
-        int readPos = queries.IndexOf(querySelectorTag);
-        if (readPos < 0)
+        int startIdx = queries.IndexOf(querySelectorTag);
+        if (startIdx < 0)
             throw new InvalidOperationException(string.Format(Resources.Text_Error_QueryString_TagNotFound, querySelectorTag.ToString()));
 
-        // trim everything before the index including the tag
-        readPos += querySelectorTag.Length;
-        while (queries.Length > readPos && char.IsWhiteSpace(queries[readPos]))
-            readPos++;
-        var query = queries[readPos..];
+        // skip tag
+        startIdx += querySelectorTag.Length;
 
-        bool hasAnyNonWhitespace = false;
-        char context = '\0'; // '\0' = none, '\'' = string, '-' = single-line comment, '*' = multi-line comment
-
-        for (readPos = 0; readPos < query.Length; readPos++)
+        // trim whitespace at start of query string
+        while (startIdx < queries.Length)
         {
-            char c = query[readPos];
-            switch (context)
-            {
-                case BeginString:
-                    if (c == '\'')
-                    {
-                        if (readPos + 1 < query.Length && query[readPos + 1] == '\'')
-                            readPos++; // escaped single quote
-                        else
-                            context = '\0'; // end of string
-                    }
-                    continue;
-                case BeginSlComment:
-                    if (c == '\n')
-                        context = '\0';
-                    continue;
-                case BeginMlComment:
-                    if (c == '*' && readPos + 1 < query.Length && query[readPos + 1] == '/')
-                    {
-                        context = '\0';
-                        readPos++;
-                    }
-                    continue;
-            }
-
-            switch (c)
-            {
-                case BeginString:
-                    hasAnyNonWhitespace |= true;
-                    context = BeginString;
-                    break;
-                case BeginSlComment when readPos + 1 < query.Length && query[readPos + 1] == '-':
-                    context = BeginSlComment;
-                    readPos++;
-                    break;
-                case BeginMlComment when readPos + 1 < query.Length && query[readPos + 1] == '*':
-                    context = BeginMlComment;
-                    readPos++;
-                    break;
-                case ';' when context == '\0':
-                    goto EndQuery;
-                default:
-                    hasAnyNonWhitespace |= !char.IsWhiteSpace(c);
-                    break;
-            }
+            if (!char.IsWhiteSpace(queries[startIdx])) break;
+            startIdx++;
         }
 
-    EndQuery:
-        if (readPos < query.Length)
-            query = query[..readPos];
-        query = query.Trim();
+        int currIdx = startIdx;
+        int endIdx = -1;
+        QueryParseContext ctx = QueryParseContext.None;
 
-        if (context != '\0' && context != BeginSlComment)
-            throw new InvalidOperationException(string.Format(Resources.Text_Error_QueryString_InvalidFormat, context));
-        if (query.Length == 0 || !hasAnyNonWhitespace)
+        while (currIdx < queries.Length)
+        {
+            switch (ctx, queries[currIdx])
+            {
+                // NONE
+                case (QueryParseContext.None, ';'):
+                    endIdx = currIdx;
+                    currIdx = queries.Length; // breaks loop
+                    break;
+                case (QueryParseContext.None, '\''):
+                    ctx = QueryParseContext.String;
+                    endIdx = currIdx;
+                    break;
+                case (QueryParseContext.None, '-') when NextChar(queries, currIdx) == '-':
+                    ctx = QueryParseContext.SingleLineComment;
+                    currIdx++;
+                    break;
+                case (QueryParseContext.None, '/') when NextChar(queries, currIdx) == '*':
+                    ctx = QueryParseContext.MultiLineComment;
+                    currIdx++;
+                    break;
+                case (QueryParseContext.None, var c):
+                    if (!char.IsWhiteSpace(c))
+                        endIdx = currIdx;
+                    break;
+
+                // STRING
+                case (QueryParseContext.String, '\'') when NextChar(queries, currIdx) == '\'':
+                    endIdx = ++currIdx; // skip escaped single quote
+                    break;
+                case (QueryParseContext.String, '\''):
+                    ctx = QueryParseContext.None; // end of string
+                    endIdx = currIdx;
+                    break;
+                case (QueryParseContext.String, _):
+                    endIdx = currIdx;
+                    break;
+
+                // SINGLE LINE COMMENT
+                case (QueryParseContext.SingleLineComment, '\n'):
+                    ctx = QueryParseContext.None; // EOL
+                    break;
+                case (QueryParseContext.SingleLineComment, _):
+                    break;
+
+                // MULTI LINE COMMENT
+                case (QueryParseContext.MultiLineComment, '*') when NextChar(queries, currIdx) == '/':
+                    ctx = QueryParseContext.None; // end of comment
+                    currIdx++; // skip closing slash
+                    break;
+                case (QueryParseContext.MultiLineComment, _):
+                    break;
+            }
+            currIdx++;
+        }
+
+        if (ctx != QueryParseContext.None && ctx != QueryParseContext.SingleLineComment)
+            throw new InvalidOperationException(string.Format(Resources.Text_Error_QueryString_InvalidFormat, ctx));
+        if (startIdx > endIdx || (startIdx == endIdx && queries[startIdx] == ';'))
             throw new InvalidOperationException(Resources.Text_Error_QueryString_Empty);
 
-        return query;
+        return queries[startIdx..(endIdx + 1)];
     }
 
     /// <param name="queries">String that contains one or more identifiable queries</param>
@@ -122,4 +127,16 @@ public static class StringExtensions
     /// <inheritdoc cref="GetSingleQuery(ReadOnlySpan{char}, ReadOnlySpan{char}, ReadOnlySpan{char})"/>
     public static ReadOnlySpan<char> GetSingleQuery(this string queries, ReadOnlySpan<char> querySelectorTag, ReadOnlySpan<char> requiredParameter)
         => queries.AsSpan().GetSingleQuery(querySelectorTag, requiredParameter);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static char NextChar(in ReadOnlySpan<char> src, int currentIndex)
+        => currentIndex + 1 < src.Length ? src[currentIndex + 1] : '\0';
+
+    private enum QueryParseContext
+    {
+        None,
+        String,
+        SingleLineComment,
+        MultiLineComment
+    }
 }
