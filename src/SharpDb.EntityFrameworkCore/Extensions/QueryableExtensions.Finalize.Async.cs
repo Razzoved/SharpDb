@@ -660,6 +660,20 @@ public static partial class QueryableExtensions
         }
     }
 
+    #if NET10_0_OR_GREATER
+    public static async Task<DbExecResult> ExecuteUpdateAsyncResult<T>(this IQueryable<T> query, Action<UpdateSettersBuilder<T>> setPropertyCalls, CancellationToken cancellation = default)
+    {
+        try
+        {
+            return DbExecResult.Success(await query.ExecuteUpdateAsync(setPropertyCalls, cancellation).ConfigureAwait(false));
+        }
+        catch (Exception e)
+        {
+            ThrowIfTransient(query, e);
+            return DbExecResult.Failure(new ExceptionDbError(e));
+        }
+    }
+    #else
     public static async Task<DbExecResult> ExecuteUpdateAsyncResult<T>(this IQueryable<T> query, Expression<Func<SetPropertyCalls<T>, SetPropertyCalls<T>>> setPropertyCalls, CancellationToken cancellation = default)
     {
         try
@@ -672,6 +686,7 @@ public static partial class QueryableExtensions
             return DbExecResult.Failure(new ExceptionDbError(e));
         }
     }
+    #endif
 
     public static async Task<DbExecResult> ExecuteDeleteAsyncResult<T>(this IQueryable<T> query, CancellationToken cancellation = default)
     {
