@@ -1,4 +1,5 @@
 ﻿using System.Data.Common;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 
 namespace SharpDb;
@@ -8,61 +9,59 @@ public static class DbDataReaderExtensions
     /// <summary>
     /// Method for getting a value from DataReader, returns the value only if the
     /// column is present and can be converted to the given type. Errors out when
-    /// the value is DBNULL and the <see cref="Nullable.GetUnderlyingType(Type)"/> is null.
+    /// the value is <see cref="DBNull"/> and the <see cref="Nullable.GetUnderlyingType(Type)"/> is null.
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="this"></param>
     /// <param name="fieldName"></param>
-    /// <remarks>! Only direct conversion, non-negative or upcasting is allowed (ie. double can be converted to string, but not to float) !</remarks>
+    /// <remarks>! Only direct conversion, non-negative or upcasting is allowed (i.e. double can be converted to string, but not to float) !</remarks>
     /// <returns>Value of type T or exception</returns>
     /// <exception cref="ArgumentOutOfRangeException">When the column does not exist</exception>
     /// <exception cref="InvalidCastException">When value could not be resolved</exception>
     public static T GetValue<T>(this DbDataReader @this, string fieldName) where T : notnull
     {
         int index = @this.GetOrdinalNoThrow(fieldName);
-
         if (index < 0)
             throw new ArgumentOutOfRangeException(nameof(fieldName), string.Format(Resources.Text_Error_DbDataReader_ColumnNotFound, fieldName));
-        var desiredType = typeof(T);
+
         if (@this.IsDBNull(index))
         {
-            if (Nullable.GetUnderlyingType(desiredType) is not null)
-                return default!;
-            throw new InvalidCastException(string.Format(Resources.Text_Error_DbDataReader_ColumnValueIsNull, fieldName, typeof(T).Name));
+            return Nullable.GetUnderlyingType(typeof(T)) is null
+                ? throw new InvalidCastException(string.Format(Resources.Text_Error_DbDataReader_ColumnValueIsNull, fieldName, typeof(T).Name))
+                : default!;
         }
 
-        var type = @this.GetFieldType(index);
-        if (desiredType == type || Nullable.GetUnderlyingType(desiredType) == type)
-            return @this.GetFieldValue<T>(index);
-        return Convert<T>(@this, index, fieldName, type);
+        var fieldType = @this.GetFieldType(index);
+        return typeof(T) == fieldType || Nullable.GetUnderlyingType(typeof(T)) == fieldType
+            ? @this.GetFieldValue<T>(index)
+            : Convert<T>(@this, index, fieldName, fieldType);
     }
 
     /// <summary>
     /// Method for getting a value from DataReader, returns the value only if the column
-    /// is present and can be converted to the given type. If the value is DBNULL, produces
+    /// is present and can be converted to the given type. If the value is <see cref="DBNull"/>, produces
     /// NULL.
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="this"></param>
     /// <param name="fieldName"></param>
-    /// <remarks>! Only direct conversion, non-negative or upcasting is allowed (ie. double can be converted to string, but not to float) !</remarks>
+    /// <remarks>! Only direct conversion, non-negative or upcasting is allowed (i.e. double can be converted to string, but not to float) !</remarks>
     /// <returns>Value of type T, null or exception</returns>
     /// <exception cref="ArgumentOutOfRangeException">When the column does not exist</exception>
     /// <exception cref="InvalidCastException">When value could not be resolved</exception>
     public static T? GetNullableValue<T>(this DbDataReader @this, string fieldName) where T : struct
     {
         int index = @this.GetOrdinalNoThrow(fieldName);
-
         if (index < 0)
             throw new ArgumentOutOfRangeException(nameof(fieldName), string.Format(Resources.Text_Error_DbDataReader_ColumnNotFound, fieldName));
+
         if (@this.IsDBNull(index))
             return null;
 
-        var desiredType = typeof(T);
-        var type = @this.GetFieldType(index);
-        if (desiredType == type || Nullable.GetUnderlyingType(desiredType) == type)
-            return @this.GetFieldValue<T>(index);
-        return Convert<T>(@this, index, fieldName, type);
+        var fieldType = @this.GetFieldType(index);
+        return typeof(T) == fieldType || Nullable.GetUnderlyingType(typeof(T)) == fieldType
+            ? @this.GetFieldValue<T>(index)
+            : Convert<T>(@this, index, fieldName, fieldType);
     }
 
     /// <summary>
@@ -71,50 +70,46 @@ public static class DbDataReaderExtensions
     /// </summary>
     /// <param name="this"></param>
     /// <param name="fieldName"></param>
-    /// <remarks>! Only direct conversion, non-negative or upcasting is allowed (ie. double can be converted to string, but not to float) !</remarks>
+    /// <remarks>! Only direct conversion, non-negative or upcasting is allowed (i.e. double can be converted to string, but not to float) !</remarks>
     /// <returns>String value or null</returns>
     /// <exception cref="ArgumentOutOfRangeException">When the column does not exist</exception>
-    /// <exception cref="InvalidCastException">When value could not be resolved</exception>"
+    /// <exception cref="InvalidCastException">When value could not be resolved</exception>
     public static string? GetNullableString(this DbDataReader @this, string fieldName)
     {
         int index = @this.GetOrdinalNoThrow(fieldName);
-
         if (index < 0)
             throw new ArgumentOutOfRangeException(nameof(fieldName), string.Format(Resources.Text_Error_DbDataReader_ColumnNotFound, fieldName));
+
         if (@this.IsDBNull(index))
             return null;
 
-        var type = @this.GetFieldType(index);
-        if (type == typeof(string))
-            return @this.GetString(index);
-        return Convert<string>(@this, index, fieldName, type);
+        var fieldType = @this.GetFieldType(index);
+        return fieldType == typeof(string)
+            ? @this.GetString(index)
+            : Convert<string>(@this, index, fieldName, fieldType);
     }
 
     /// <summary>
     /// Method for getting a value from DataReader, if the column is not present or
-    /// its value is NULL, returns the default value. Otherwise tries to convert it
+    /// its value is NULL, returns the default value. Otherwise, tries to convert it
     /// to the desired type.
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="this"></param>
     /// <param name="fieldName"></param>
     /// <param name="defaultValue"></param>
-    /// <remarks>! Only direct conversion, non-negative or upcasting is allowed (ie. double can be converted to string, but not to float) !</remarks>
+    /// <remarks>! Only direct conversion, non-negative or upcasting is allowed (i.e. double can be converted to string, but not to float) !</remarks>
     /// <returns>Value of type T or fallback/default value</returns>
-    /// <exception cref="InvalidCastException">When value could not be resolved</exception>"
+    /// <exception cref="InvalidCastException">When value could not be resolved</exception>
     public static T GetValueOrDefault<T>(this DbDataReader @this, string fieldName, T defaultValue = default!)
     {
         int index = @this.GetOrdinalNoThrow(fieldName);
-
-        if (index < 0)
-            return defaultValue;
-        if (@this.IsDBNull(index))
+        if (index < 0 || @this.IsDBNull(index))
             return defaultValue;
 
-        var type = @this.GetFieldType(index);
-        if (typeof(T) == type)
-            return @this.GetFieldValue<T>(index);
-        return Convert<T>(@this, index, fieldName, type);
+        return typeof(T) == @this.GetFieldType(index)
+            ? @this.GetFieldValue<T>(index)
+            : Convert<T>(@this, index, fieldName, @this.GetFieldType(index));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -134,18 +129,18 @@ public static class DbDataReaderExtensions
         {
             T convertedValue = fieldType switch
             {
-                Type t when t == typeof(string) => ConvertFromString<T>(reader.GetString(index)),
-                Type t when t == typeof(decimal) => ConvertFromDecimal<T>(reader.GetDecimal(index)),
-                Type t when t == typeof(double) => ConvertFromDouble<T>(reader.GetDouble(index)),
-                Type t when t == typeof(float) => ConvertFromFloat<T>(reader.GetFloat(index)),
-                Type t when t == typeof(long) => ConvertFromInt64<T>(reader.GetInt64(index)),
-                Type t when t == typeof(int) => ConvertFromInt32<T>(reader.GetInt32(index)),
-                Type t when t == typeof(short) => ConvertFromInt16<T>(reader.GetInt16(index)),
-                Type t when t == typeof(byte) => ConvertFromInt8<T>(reader.GetByte(index)),
-                Type t when t == typeof(bool) => ConvertFromBool<T>(reader.GetBoolean(index)),
-                Type t when t == typeof(DateTime) => ConvertFromDateTime<T>(reader.GetDateTime(index)),
-                Type t when t == typeof(DateTimeOffset) => ConvertFromDateTimeOffset<T>(reader.GetFieldValue<DateTimeOffset>(index)),
-                Type t when t == typeof(Guid) => ConvertFromGuid<T>(reader.GetGuid(index)),
+                not null when fieldType == typeof(string) => ConvertFromString<T>(reader.GetString(index)),
+                not null when fieldType == typeof(int) => ConvertFromInt32<T>(reader.GetInt32(index)),
+                not null when fieldType == typeof(DateTime) => ConvertFromDateTime<T>(reader.GetDateTime(index)),
+                not null when fieldType == typeof(bool) => ConvertFromBool<T>(reader.GetBoolean(index)),
+                not null when fieldType == typeof(decimal) => ConvertFromDecimal<T>(reader.GetDecimal(index)),
+                not null when fieldType == typeof(long) => ConvertFromInt64<T>(reader.GetInt64(index)),
+                not null when fieldType == typeof(Guid) => ConvertFromGuid<T>(reader.GetGuid(index)),
+                not null when fieldType == typeof(double) => ConvertFromDouble<T>(reader.GetDouble(index)),
+                not null when fieldType == typeof(float) => ConvertFromFloat<T>(reader.GetFloat(index)),
+                not null when fieldType == typeof(byte) => ConvertFromInt8<T>(reader.GetByte(index)),
+                not null when fieldType == typeof(short) => ConvertFromInt16<T>(reader.GetInt16(index)),
+                not null when fieldType == typeof(DateTimeOffset) => ConvertFromDateTimeOffset<T>(reader.GetFieldValue<DateTimeOffset>(index)),
                 _ => (T)reader.GetValue(index),
             };
             return convertedValue;
@@ -162,7 +157,7 @@ public static class DbDataReaderExtensions
 
     private static T ConvertFromString<T>(string value)
     {
-        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) is Type t ? t : typeof(T);
+        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
         if (desiredType == typeof(string))
             return ConvertNoBox<string, T>(value);
@@ -213,7 +208,7 @@ public static class DbDataReaderExtensions
 
     private static T ConvertFromDecimal<T>(decimal value)
     {
-        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) is Type t ? t : typeof(T);
+        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
         if (desiredType == typeof(decimal))
             return ConvertNoBox<decimal, T>(value);
@@ -228,14 +223,14 @@ public static class DbDataReaderExtensions
             return ConvertNoBox<bool, T>(Math.Abs(value) > 0.0001M);
         // decimal to string
         if (desiredType == typeof(string))
-            return ConvertNoBox<string, T>(value.ToString());
+            return ConvertNoBox<string, T>(value.ToString(CultureInfo.InvariantCulture));
 
         return (T)(object)value;
     }
 
     private static T ConvertFromDouble<T>(double value)
     {
-        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) is Type t ? t : typeof(T);
+        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
         if (desiredType == typeof(double))
             return ConvertNoBox<double, T>(value);
@@ -252,14 +247,14 @@ public static class DbDataReaderExtensions
             return ConvertNoBox<bool, T>(Math.Abs(value) > 0.001);
         // double to string
         if (desiredType == typeof(string))
-            return ConvertNoBox<string, T>(value.ToString());
+            return ConvertNoBox<string, T>(value.ToString(CultureInfo.InvariantCulture));
 
         return (T)(object)value;
     }
 
     private static T ConvertFromFloat<T>(float value)
     {
-        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) is Type t ? t : typeof(T);
+        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
         if (desiredType == typeof(float))
             return ConvertNoBox<float, T>(value);
@@ -276,14 +271,14 @@ public static class DbDataReaderExtensions
             return ConvertNoBox<bool, T>(Math.Abs(value) > 0.001);
         // float to string
         if (desiredType == typeof(string))
-            return ConvertNoBox<string, T>(value.ToString());
+            return ConvertNoBox<string, T>(value.ToString(CultureInfo.InvariantCulture));
 
         return (T)(object)value;
     }
 
     private static T ConvertFromInt64<T>(long value)
     {
-        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) is Type t ? t : typeof(T);
+        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
         if (desiredType == typeof(long))
             return ConvertNoBox<long, T>(value);
@@ -301,14 +296,14 @@ public static class DbDataReaderExtensions
             return ConvertNoBox<bool, T>(value != 0);
         // long to string
         if (desiredType == typeof(string))
-            return ConvertNoBox<string, T>(value.ToString());
+            return ConvertNoBox<string, T>(value.ToString(CultureInfo.InvariantCulture));
 
         return (T)(object)value;
     }
 
     private static T ConvertFromInt32<T>(int value)
     {
-        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) is Type t ? t : typeof(T);
+        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
         if (desiredType == typeof(int))
             return ConvertNoBox<int, T>(value);
@@ -335,14 +330,14 @@ public static class DbDataReaderExtensions
             return ConvertNoBox<bool, T>(value != 0);
         // int to string
         if (desiredType == typeof(string))
-            return ConvertNoBox<string, T>(value.ToString());
+            return ConvertNoBox<string, T>(value.ToString(CultureInfo.InvariantCulture));
 
         return (T)(object)value;
     }
 
     private static T ConvertFromInt16<T>(short value)
     {
-        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) is Type t ? t : typeof(T);
+        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
         if (desiredType == typeof(short))
             return ConvertNoBox<short, T>(value);
@@ -378,14 +373,14 @@ public static class DbDataReaderExtensions
             return ConvertNoBox<bool, T>(value != 0);
         // byte to string
         if (desiredType == typeof(string))
-            return ConvertNoBox<string, T>(value.ToString());
+            return ConvertNoBox<string, T>(value.ToString(CultureInfo.InvariantCulture));
 
         return (T)(object)value;
     }
 
     private static T ConvertFromInt8<T>(byte value)
     {
-        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) is Type t ? t : typeof(T);
+        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
         if (desiredType == typeof(byte))
             return ConvertNoBox<byte, T>(value);
@@ -414,14 +409,14 @@ public static class DbDataReaderExtensions
             return ConvertNoBox<bool, T>(value != 0);
         // byte to string
         if (desiredType == typeof(string))
-            return ConvertNoBox<string, T>(value.ToString());
+            return ConvertNoBox<string, T>(value.ToString(CultureInfo.InvariantCulture));
 
         return (T)(object)value;
     }
 
     private static T ConvertFromBool<T>(bool value)
     {
-        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) is Type t ? t : typeof(T);
+        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
         // bool to other numerics
         if (desiredType == typeof(decimal))
@@ -453,7 +448,7 @@ public static class DbDataReaderExtensions
 
     private static T ConvertFromDateTime<T>(DateTime value)
     {
-        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) is Type t ? t : typeof(T);
+        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
         if (desiredType == typeof(DateTime))
             return ConvertNoBox<DateTime, T>(value);
@@ -463,13 +458,15 @@ public static class DbDataReaderExtensions
             return ConvertNoBox<DateOnly, T>(DateOnly.FromDateTime(value));
         if (desiredType == typeof(TimeOnly))
             return ConvertNoBox<TimeOnly, T>(TimeOnly.FromDateTime(value));
+        if (desiredType == typeof(string))
+            return ConvertNoBox<string, T>(value.ToString(CultureInfo.InvariantCulture));
 
         return (T)(object)value;
     }
 
     private static T ConvertFromDateTimeOffset<T>(DateTimeOffset value)
     {
-        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) is Type t ? t : typeof(T);
+        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
         if (desiredType == typeof(DateTimeOffset))
             return ConvertNoBox<DateTimeOffset, T>(value);
@@ -479,13 +476,15 @@ public static class DbDataReaderExtensions
             return ConvertNoBox<DateOnly, T>(DateOnly.FromDateTime(value.DateTime));
         if (desiredType == typeof(TimeOnly))
             return ConvertNoBox<TimeOnly, T>(TimeOnly.FromDateTime(value.DateTime));
+        if (desiredType == typeof(string))
+            return ConvertNoBox<string, T>(value.ToString(CultureInfo.InvariantCulture));
 
         return (T)(object)value;
     }
 
     private static T ConvertFromGuid<T>(Guid value)
     {
-        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) is Type t ? t : typeof(T);
+        Type desiredType = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
 
         if (desiredType == typeof(Guid))
             return ConvertNoBox<Guid, T>(value);
@@ -494,7 +493,6 @@ public static class DbDataReaderExtensions
 
         return (T)(object)value;
     }
-
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static TTo ConvertNoBox<TFrom, TTo>(TFrom value)
