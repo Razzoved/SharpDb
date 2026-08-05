@@ -651,6 +651,20 @@ public static partial class QueryableExtensions
 
     #endregion
 
+    #if NET10_0_OR_GREATER
+    public static DbExecResult ExecuteUpdateResult<T>(this IQueryable<T> query, Action<UpdateSettersBuilder<T>> setPropertyCalls)
+    {
+        try
+        {
+            return DbExecResult.Success(query.ExecuteUpdate(setPropertyCalls));
+        }
+        catch (Exception e)
+        {
+            ThrowIfTransient(query, e);
+            return DbExecResult.Failure(new ExceptionDbError(e));
+        }
+    }
+    #else
     public static DbExecResult ExecuteUpdateResult<T>(this IQueryable<T> query, Expression<Func<SetPropertyCalls<T>, SetPropertyCalls<T>>> setPropertyCalls)
     {
         try
@@ -663,6 +677,7 @@ public static partial class QueryableExtensions
             return DbExecResult.Failure(new ExceptionDbError(e));
         }
     }
+    #endif
 
     public static DbExecResult ExecuteDeleteResult<T>(this IQueryable<T> query)
     {
