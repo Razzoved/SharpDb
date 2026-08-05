@@ -12,13 +12,19 @@ module StringExtensionsTests =
 
     [<Fact>]
     let ``GetSingleQuery extracts query by tag`` () =
-        let queries = "--tag1\nSELECT 1;\n--tag2\nSELECT 2;"
+        let queries = "--tag1\nSELECT 1;\n--tag2\nSELECT 2"
         let result = queries.GetSingleQuery("--tag2".AsSpan())
         Assert.Equal("SELECT 2", result.ToString())
 
     [<Fact>]
+    let ``GetSingleQuery extracts query by tag with semicolon`` () =
+        let queries = "--tag1\nSELECT 1;  "
+        let result = queries.GetSingleQuery("--tag1".AsSpan())
+        Assert.Equal("SELECT 1;", result.ToString())
+
+    [<Fact>]
     let ``GetSingleQuery extracts trimmed query by tag`` () =
-        let queries = "--tag1\nSELECT 1;\n--tag2\n   SELECT 2     ;"
+        let queries = "--tag1\nSELECT 1;\n--tag2\n   SELECT 2     "
         let result = queries.GetSingleQuery("--tag2".AsSpan())
         Assert.Equal("SELECT 2", result.ToString())
 
@@ -26,25 +32,25 @@ module StringExtensionsTests =
     let ``GetSingleQuery extracts query with escaped string by tag`` () =
         let queries = "--tag1\nSELECT 1;\n--tag2\nSELECT 2 from X where Y = 'escaped mama''s string';"
         let result = queries.GetSingleQuery("--tag2".AsSpan())
-        Assert.Equal("SELECT 2 from X where Y = 'escaped mama''s string'", result.ToString())
+        Assert.Equal("SELECT 2 from X where Y = 'escaped mama''s string';", result.ToString())
 
     [<Fact>]
     let ``GetSingleQuery extracts query with sl-comment in string`` () =
         let queries = "--tag1\nSELECT 1;\n--tag2\nSELECT 2 from X where Y = 'escaped mama\n--''s string';"
         let result = queries.GetSingleQuery("--tag2".AsSpan())
-        Assert.Equal("SELECT 2 from X where Y = 'escaped mama\n--''s string'", result.ToString())
+        Assert.Equal("SELECT 2 from X where Y = 'escaped mama\n--''s string';", result.ToString())
 
     [<Fact>]
     let ``GetSingleQuery extracts query with ml-comment in string`` () =
         let queries = "--tag1\nSELECT 1;\n--tag2\nSELECT 2 from X where Y = 'escaped mama/*''*/s string';"
         let result = queries.GetSingleQuery("--tag2".AsSpan())
-        Assert.Equal("SELECT 2 from X where Y = 'escaped mama/*''*/s string'", result.ToString())
+        Assert.Equal("SELECT 2 from X where Y = 'escaped mama/*''*/s string';", result.ToString())
 
     [<Fact>]
     let ``GetSingleQuery extracts query with semicolon in string`` () =
         let queries = "--tag1\nSELECT 1;\n--tag2\nSELECT 2 from X where Y = 'escaped mama;s string';"
         let result = queries.GetSingleQuery("--tag2".AsSpan())
-        Assert.Equal("SELECT 2 from X where Y = 'escaped mama;s string'", result.ToString())
+        Assert.Equal("SELECT 2 from X where Y = 'escaped mama;s string';", result.ToString())
 
     [<Fact>]
     let ``GetSingleQuery throws if semicolon not escaped (at end)`` () =
@@ -82,7 +88,7 @@ module StringExtensionsTests =
     let ``GetSingleQuery trims at semicolon`` () =
         let queries = "--tag\nSELECT 1; SELECT 2;"
         let result = StringExtensions.GetSingleQuery(queries, "--tag".AsSpan())
-        Assert.Equal("SELECT 1", result.ToString())
+        Assert.Equal("SELECT 1;", result.ToString())
 
     [<Fact>]
     let ``GetSingleQuery throws if query is empty`` () =
