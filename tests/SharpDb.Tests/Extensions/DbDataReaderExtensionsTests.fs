@@ -10,7 +10,6 @@ module DbDataReaderExtensionsTests =
     type FakeDbDataReader(columns: (string * Type * obj) list) =
         inherit DbDataReader()
         let columnsArr = columns |> List.toArray
-        let mutable currentRow = 0
         override _.FieldCount = columnsArr.Length
         override _.GetName(i) = columnsArr[i] |> fun (n, _, _) -> n
         override _.GetOrdinal(name) =
@@ -21,7 +20,7 @@ module DbDataReaderExtensionsTests =
         override _.IsDBNull(i) = columnsArr[i] |> fun (_, _, v) -> v = null || obj.ReferenceEquals(v, DBNull.Value)
         override _.GetValue(i) = columnsArr[i] |> fun (_, _, v) -> v
         override _.GetString(i) = columnsArr[i] |> fun (_, _, v) -> v :?> string
-        override _.GetInt16 (i) = columnsArr[i] |> fun (_, _, v) -> v :?> int16
+        override _.GetInt16(i) = columnsArr[i] |> fun (_, _, v) -> v :?> int16
         override _.GetInt32(i) = columnsArr[i] |> fun (_, _, v) -> v :?> int
         override _.GetInt64(i) = columnsArr[i] |> fun (_, _, v) -> v :?> int64
         override _.GetFloat(i) = columnsArr[i] |> fun (_, _, v) -> v :?> float32
