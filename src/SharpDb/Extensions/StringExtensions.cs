@@ -1,4 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices.ComTypes;
 
 namespace SharpDb;
 
@@ -105,22 +106,116 @@ public static class StringExtensions
     /// <inheritdoc cref="GetSingleQuery(ReadOnlySpan{char}, ReadOnlySpan{char})"/>
     public static ReadOnlySpan<char> GetSingleQuery(this ReadOnlySpan<char> queries, ReadOnlySpan<char> querySelectorTag, ReadOnlySpan<char> requiredParameter)
     {
-        var query = queries.GetSingleQuery(querySelectorTag);
+        int startIdx = queries.IndexOf(querySelectorTag);
+        if (startIdx < 0)
+            throw new InvalidOperationException(string.Format(Resources.Text_Error_QueryString_TagNotFound, querySelectorTag.ToString()));
 
-        // verify that the required parameter exists in the query
-        int index = query.IndexOf(requiredParameter);
-        if (index < 0)
-            throw new InvalidOperationException(string.Format(Resources.Text_Error_QueryString_TagNotFound, requiredParameter.ToString()));
+        // skip tag
+        startIdx += querySelectorTag.Length;
 
-        // verify that the required parameter is not commented out
-        while (--index > 0 && query[index] != '\n')
+        // trim whitespace at start of query string
+        while (startIdx < queries.Length)
         {
-            var commentSlice = query.Slice(index, 2);
-            if (commentSlice.StartsWith("--") || commentSlice.StartsWith("/*"))
-                throw new InvalidOperationException(string.Format(Resources.Text_Error_QueryString_TagCommentedOut, requiredParameter.ToString()));
+            if (!char.IsWhiteSpace(queries[startIdx])) break;
+            startIdx++;
         }
 
-        return query;
+        int currIdx = startIdx;
+        int endIdx = -1;
+        QueryParseContext ctx = QueryParseContext.None;
+
+        // handle required parameter
+        int parameterStart = requiredParameter.StartsWith("@") ? 0 : 1;
+        bool parameterFound = false;
+        bool parameterFoundInsideComment = false;
+
+        while (currIdx < queries.Length)
+        {
+            switch (ctx, queries[currIdx])
+            {
+                // NONE
+                case (QueryParseContext.None, ';'):
+                    endIdx = currIdx;
+                    currIdx = queries.Length; // breaks loop
+                    break;
+                case (QueryParseContext.None, '\''):
+                    ctx = QueryParseContext.String;
+                    endIdx = currIdx;
+                    break;
+                case (QueryParseContext.None, '-') when NextChar(queries, currIdx) == '-':
+                    ctx = QueryParseContext.SingleLineComment;
+                    currIdx++;
+                    break;
+                case (QueryParseContext.None, '/') when NextChar(queries, currIdx) == '*':
+                    ctx = QueryParseContext.MultiLineComment;
+                    currIdx++;
+                    break;
+                case (QueryParseContext.None, var c):
+                    if (!char.IsWhiteSpace(c))
+                        endIdx = currIdx;
+                    break;
+
+                // STRING
+                case (QueryParseContext.String, '\'') when NextChar(queries, currIdx) == '\'':
+                    endIdx = ++currIdx; // skip escaped single quote
+                    break;
+                case (QueryParseContext.String, '\''):
+                    ctx = QueryParseContext.None; // end of string
+                    endIdx = currIdx;
+                    break;
+                case (QueryParseContext.String, _):
+                    endIdx = currIdx;
+                    break;
+
+                // SINGLE LINE COMMENT
+                case (QueryParseContext.SingleLineComment, '\n'):
+                    ctx = QueryParseContext.None; // EOL
+                    break;
+                case (QueryParseContext.SingleLineComment, _):
+                    break;
+
+                // MULTI LINE COMMENT
+                case (QueryParseContext.MultiLineComment, '*') when NextChar(queries, currIdx) == '/':
+                    ctx = QueryParseContext.None; // end of comment
+                    currIdx++; // skip closing slash
+                    break;
+                case (QueryParseContext.MultiLineComment, _):
+                    break;
+            }
+
+            // POSSIBLE PARAMETER
+            if (currIdx < queries.Length)
+            {
+                if (!parameterFound && queries[currIdx] == '@' && queries.Length >= currIdx + parameterStart + requiredParameter.Length )
+                {
+                    if (queries.Slice(currIdx + parameterStart, requiredParameter.Length).SequenceEqual(requiredParameter))
+                    {
+                        switch (ctx)
+                        {
+                            case QueryParseContext.None:
+                                parameterFound = true;
+                                break;
+                            case QueryParseContext.SingleLineComment or QueryParseContext.MultiLineComment:
+                                parameterFoundInsideComment = true;
+                                break;
+                        }
+                    }
+                }
+            }
+
+            currIdx++;
+        }
+
+        if (ctx != QueryParseContext.None && ctx != QueryParseContext.SingleLineComment)
+            throw new InvalidOperationException(string.Format(Resources.Text_Error_QueryString_InvalidFormat, ctx));
+        if (startIdx > endIdx || (startIdx == endIdx && queries[startIdx] == ';'))
+            throw new InvalidOperationException(Resources.Text_Error_QueryString_Empty);
+        if (!parameterFound && parameterFoundInsideComment)
+            throw new InvalidOperationException(string.Format(Resources.Text_Error_QueryString_TagCommentedOut, requiredParameter.ToString()));
+        if (!parameterFound)
+            throw new InvalidOperationException(string.Format(Resources.Text_Error_QueryString_TagNotFound, requiredParameter.ToString()));
+
+        return queries[startIdx..(endIdx + 1)];
     }
 
     /// <param name="queries">String that contains one or more identifiable queries</param>
