@@ -130,6 +130,12 @@ module StringExtensionsTests =
         Assert.Contains("@foo", result.ToString())
 
     [<Fact>]
+    let ``GetSingleQuery with required parameter succeeds when input parameter does not start with prefix`` () =
+        let queries = "--tag\nSELECT @foo FROM bar;"
+        let result = StringExtensions.GetSingleQuery(queries, "--tag".AsSpan(), "foo".AsSpan())
+        Assert.Contains("@foo", result.ToString())
+
+    [<Fact>]
     let ``GetSingleQuery with required parameter throws if not present`` () =
         let queries = "--tag\nSELECT bar;"
         let call = fun () ->
