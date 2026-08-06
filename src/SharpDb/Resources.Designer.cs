@@ -116,5 +116,11 @@ namespace SharpDb {
                 return ResourceManager.GetString("Text.Error.Comparison.IncompatibleTypes", resourceCulture);
             }
         }
+        
+        internal static string Text_Error_Transaction_NoTransientErrorFound {
+            get {
+                return ResourceManager.GetString("Text.Error.Transaction.NoTransientErrorFound", resourceCulture);
+            }
+        }
     }
 }

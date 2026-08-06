@@ -153,4 +153,7 @@
   <data name="Text.Error.Comparison.IncompatibleTypes" xml:space="preserve">
     <value>Cannot compare {0} with {1}</value>
   </data>
+  <data name="Text.Error.Transaction.NoTransientErrorFound" xml:space="preserve">
+    <value>No transient database error found in the exception chain.</value>
+  </data>
 </root>

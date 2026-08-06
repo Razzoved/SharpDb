@@ -153,4 +153,7 @@
   <data name="Text.Error.Comparison.IncompatibleTypes" xml:space="preserve">
     <value>Nelze porovnat {0} s {1}</value>
   </data>
+  <data name="Text.Error.Transaction.NoTransientErrorFound" xml:space="preserve">
+    <value>Žádná z vyjímek v retězci nebyla způsobena dočasnou chybou databáze.</value>
+  </data>
 </root>
