@@ -8,7 +8,7 @@ namespace SharpDb.Services.Impl;
 public sealed class ContextBasedUserService : IUserService
 {
     public IUser? GetCurrentUser() => UserContext.CurrentUser;
-    public object? GetCurrentUserID() => GetCurrentUser()?.GetID();
+    public object? GetCurrentUserId() => GetCurrentUser()?.GetId();
     public string? GetCurrentUserDisplayName() => GetCurrentUser()?.GetDisplayName();
 
     /// <summary>

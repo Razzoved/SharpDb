@@ -8,6 +8,6 @@ namespace SharpDb.Services;
 public interface IUserService
 {
     IUser? GetCurrentUser();
-    object? GetCurrentUserID();
+    object? GetCurrentUserId();
     string? GetCurrentUserDisplayName();
 }

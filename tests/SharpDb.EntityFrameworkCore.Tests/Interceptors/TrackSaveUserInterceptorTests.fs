@@ -15,7 +15,7 @@ module TrackSaveUserInterceptorTests =
         member val Id = 0 with get, set
         member val DisplayName = "" with get, set
         interface IUser with
-            member this.GetID() = this.Id :> obj
+            member this.GetId() = this.Id :> obj
             member this.GetDisplayName() = this.DisplayName
 
     type TestEntityC() =
@@ -66,7 +66,7 @@ module TrackSaveUserInterceptorTests =
                 | Some u -> u
                 | None -> null
             member this.GetCurrentUserDisplayName() = if user.IsSome then user.Value.GetDisplayName() else null
-            member this.GetCurrentUserID() = if user.IsSome then user.Value.GetID() else null
+            member this.GetCurrentUserId() = if user.IsSome then user.Value.GetId() else null
 
     let user =
         let x = TestUser()
@@ -85,7 +85,7 @@ module TrackSaveUserInterceptorTests =
                         .AddInterceptors(TrackSaveUserInterceptor(TestUserService(user) :> IUserService))
                         .Options
         let ctx = new TestDbContext(options)
-        if (user.IsSome) then ctx.Users.Add(user.Value :?> TestUser) |> ignore
+        if user.IsSome then ctx.Users.Add(user.Value :?> TestUser) |> ignore
         ctx.Users.Add(otherUser :?> TestUser) |> ignore
         ctx.SaveChanges() |> ignore
         ctx

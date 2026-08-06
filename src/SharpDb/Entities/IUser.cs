@@ -7,6 +7,6 @@
 /// </summary>
 public interface IUser
 {
-    object GetID();
+    object GetId();
     string GetDisplayName();
 }
