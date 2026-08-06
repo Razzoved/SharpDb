@@ -20,10 +20,13 @@ public sealed class CollectionByValuesValueComparer<T>() : ValueComparer<ICollec
         if (a is null || b is null) return false;
         if (a.Count != b.Count) return false;
 
-        for (int i = 0; i < a.Count; i++)
+        using var enumeratorA = a.GetEnumerator();
+        using var enumeratorB = b.GetEnumerator();
+
+        while (enumeratorA.MoveNext() && enumeratorB.MoveNext())
         {
-            T? aValue = a.ElementAtOrDefault(i);
-            T? bValue = b.ElementAtOrDefault(i);
+            T? aValue = enumeratorA.Current;
+            T? bValue = enumeratorB.Current;
 
             if (ReferenceEquals(aValue, bValue)) continue;
             if (aValue is null || !aValue.Equals(bValue)) return false;
@@ -35,9 +38,9 @@ public sealed class CollectionByValuesValueComparer<T>() : ValueComparer<ICollec
     private static int GetHashCodeByValues(ICollection<T> obj)
     {
         HashCode hash = new();
-        for (int i = 0; i < obj.Count; i++)
+        foreach (T item in obj)
         {
-            hash.Add(obj.ElementAtOrDefault(i));
+            hash.Add(item);
         }
         return hash.ToHashCode();
     }
