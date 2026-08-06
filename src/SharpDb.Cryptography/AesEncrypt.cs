@@ -5,7 +5,7 @@ namespace SharpDb.Cryptography;
 /// <summary>
 /// Utility class for AES encryption and decryption.
 /// </summary>
-/// <remarks>!!! DO NOT USE OUTSIDE OF YOUR DATABASE PROJECTS !!!</remarks>
+/// <remarks>!!! DO NOT USE OUTSIDE YOUR DATABASE PROJECTS !!!</remarks>
 public static class AesEncryption
 {
     public static byte[] DeterministicEncrypt(byte[] bytes, byte[] key)
