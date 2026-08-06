@@ -150,4 +150,7 @@
   <data name="Text.Error.DbDataReader.ColumnValueNotConvertable" xml:space="preserve">
     <value>Člen s názvem {0} je typu {1} a nelze ho převést na typ {2}.</value>
   </data>
+  <data name="Text.Error.Comparison.IncompatibleTypes" xml:space="preserve">
+    <value>Nelze porovnat {0} s {1}</value>
+  </data>
 </root>

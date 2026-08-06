@@ -150,4 +150,7 @@
   <data name="Text.Error.DbDataReader.ColumnValueNotConvertable" xml:space="preserve">
     <value>Column with name {0} is of type {1} and cannot be converted to type {2}.</value>
   </data>
+  <data name="Text.Error.Comparison.IncompatibleTypes" xml:space="preserve">
+    <value>Cannot compare {0} with {1}</value>
+  </data>
 </root>
