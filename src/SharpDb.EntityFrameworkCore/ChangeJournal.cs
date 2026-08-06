@@ -1,6 +1,4 @@
 ﻿using System.ComponentModel;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
@@ -8,16 +6,19 @@ namespace SharpDb.EntityFrameworkCore;
 
 internal sealed class ChangeJournal : IChangeJournal
 {
+    private const int InitialCapacity = 32;
+
     private readonly DbContext _db;
     private readonly HashSet<object> _tracked = new(ReferenceEqualityComparer.Instance);
-    private readonly Stack<IOperation> _ops = [];
+    private readonly Dictionary<object, Dictionary<string, object?>> _entitySnapshots = new(InitialCapacity / 2, ReferenceEqualityComparer.Instance);
+    private readonly Stack<Operation> _ops = new(InitialCapacity);
 
     private bool _stopped = true;
     private bool _restored;
 
     public ChangeJournal(DbContext db)
     {
-        ArgumentNullException.ThrowIfNull(db, nameof(db));
+        ArgumentNullException.ThrowIfNull(db);
         _db = db;
 
         // Capture existing tracked entities, otherwise they would be missed
@@ -26,9 +27,7 @@ internal sealed class ChangeJournal : IChangeJournal
         {
             if (_tracked.Add(entry.Entity))
             {
-                _ops.Push(entry.Entity is INotifyPropertyChanging and INotifyPropertyChanged
-                    ? new PropertyRestoreOperation(entry)
-                    : new SnapshotRestoreOperation(entry));
+                CaptureValues(entry);
             }
         }
     }
@@ -57,8 +56,7 @@ internal sealed class ChangeJournal : IChangeJournal
             Stop();
             while (_ops.Count > 0)
             {
-                var op = _ops.Pop();
-                op.Undo(_db);
+                Undo(_ops.Pop());
             }
             _tracked.Clear();
             _restored = true;
@@ -70,125 +68,110 @@ internal sealed class ChangeJournal : IChangeJournal
         var entry = e.Entry;
         if (_tracked.Add(entry.Entity))
         {
-            _ops.Push(new DetachOperation(entry));
-            _ops.Push(entry.Entity is INotifyPropertyChanging and INotifyPropertyChanged
-                ? new PropertyRestoreOperation(entry)
-                : new SnapshotRestoreOperation(entry));
+            _ops.Push(Operation.Detach(entry));
+            CaptureValues(entry);
         }
     }
 
     private void OnEntityStateChanged(object? sender, EntityStateChangedEventArgs e)
     {
         var entry = e.Entry;
-        _ops.Push(new StateRestoreOperation(entry, e.OldState));
+        _ops.Push(Operation.StateRestore(entry, e.OldState));
         if (_tracked.Add(entry.Entity))
         {
-            _ops.Push(entry.Entity is INotifyPropertyChanging and INotifyPropertyChanged
-                ? new PropertyRestoreOperation(entry)
-                : new SnapshotRestoreOperation(entry));
+            CaptureValues(entry);
         }
     }
 
-    /// <summary>
-    /// Operations that can be undone.
-    /// </summary>
-    private interface IOperation
+    private void OnEntityPropertyChanging(object? sender, PropertyChangingEventArgs e)
     {
-        void Undo(DbContext context);
-    }
-
-    private sealed class DetachOperation(EntityEntry entry) : IOperation
-    {
-        public void Undo(DbContext context)
+        if (sender is not null && e.PropertyName is not null)
         {
-            entry.State = EntityState.Detached;
-        }
-    }
-
-    private sealed class StateRestoreOperation(EntityEntry entry, EntityState previousState) : IOperation
-    {
-        public void Undo(DbContext context)
-        {
-            entry.State = previousState;
-        }
-    }
-
-    private sealed class SnapshotRestoreOperation : IOperation
-    {
-        private readonly PropertyValues _currentValues;
-        private readonly PropertyValues _snapshot;
-
-        public SnapshotRestoreOperation(EntityEntry entry)
-        {
-            _currentValues = entry.CurrentValues;
-            _snapshot = entry.CurrentValues.Clone();
-        }
-
-        public void Undo(DbContext context)
-        {
-            _currentValues.SetValues(_snapshot);
-        }
-    }
-
-    private sealed class PropertyRestoreOperation : IOperation
-    {
-        private readonly object _source;
-        private readonly PropertyValues _currentValues;
-        private Dictionary<string, (bool IsChanged, object? Value)>? _changedValues;
-
-        public PropertyRestoreOperation(EntityEntry entry)
-        {
-            _source = entry.Entity;
-            _currentValues = entry.CurrentValues;
-            ((INotifyPropertyChanging)_source).PropertyChanging += OnPropertyChanging;
-            ((INotifyPropertyChanged)_source).PropertyChanged += OnPropertyChanged;
-        }
-
-        public void Undo(DbContext context)
-        {
-            ((INotifyPropertyChanged)_source).PropertyChanged -= OnPropertyChanged;
-            ((INotifyPropertyChanging)_source).PropertyChanging -= OnPropertyChanging;
-            if (_changedValues is not null)
+            // Create snapshot dictionary if needed
+            if (!_entitySnapshots.TryGetValue(sender, out var dict))
             {
-                foreach (var (propertyName, data) in _changedValues)
+                dict = new Dictionary<string, object?>(4);
+                _entitySnapshots.Add(sender, dict);
+            }
+            // Take snapshot on FIRST change of property only
+            if (!dict.ContainsKey(e.PropertyName))
+            {
+                object? currentValue = _db.Entry(sender).CurrentValues[e.PropertyName];
+                dict.Add(e.PropertyName, currentValue);
+            }
+        }
+    }
+
+    private void CaptureValues(in EntityEntry entry)
+    {
+        if (entry.Entity is INotifyPropertyChanging notifier)
+        {
+            notifier.PropertyChanging += OnEntityPropertyChanging;
+            _ops.Push(Operation.PropertyRestore(entry));
+        }
+        else
+        {
+            _ops.Push(Operation.SnapshotRestore(entry, entry.CurrentValues.Clone()));
+        }
+    }
+
+    private void Undo(in Operation op)
+    {
+        switch (op.Type)
+        {
+            case OperationType.Detach:
                 {
-                    if (data.IsChanged)
+                    var entry = (EntityEntry)op.Data1;
+                    entry.State = EntityState.Detached;
+                }
+                break;
+            case OperationType.PropertyRestore:
+                {
+                    var entry = (EntityEntry)op.Data1;
+                    ((INotifyPropertyChanging)entry.Entity).PropertyChanging -= OnEntityPropertyChanging;
+                    if (_entitySnapshots.TryGetValue(entry.Entity, out var dict))
                     {
-                        _currentValues[propertyName] = data.Value;
+                        foreach (var d in dict)
+                        {
+                            entry.CurrentValues[d.Key] = d.Value;
+                        }
+                        _entitySnapshots.Remove(entry);
                     }
                 }
-            }
-        }
-
-        private void OnPropertyChanging(object? sender, PropertyChangingEventArgs e)
-        {
-            string? propertyName = e.PropertyName;
-            if (!string.IsNullOrWhiteSpace(propertyName))
-            {
-                if (_changedValues is not null)
+                break;
+            case OperationType.StateRestore:
                 {
-                    ref var changedValue = ref CollectionsMarshal.GetValueRefOrNullRef(_changedValues, propertyName);
-                    if (Unsafe.IsNullRef(ref changedValue))
-                    {
-                        changedValue = (false, _currentValues[propertyName]);
-                    }
-                    return;
+                    var entry = (EntityEntry)op.Data1;
+                    entry.State = (EntityState)op.Data2;
                 }
-                _changedValues = new() { [propertyName] = (false, _currentValues[propertyName]) };
-            }
-        }
-
-        private void OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            string? propertyName = e.PropertyName;
-            if (!string.IsNullOrWhiteSpace(propertyName))
-            {
-                ref var changedValue = ref CollectionsMarshal.GetValueRefOrNullRef(_changedValues!, propertyName);
-                if (!Unsafe.IsNullRef(ref changedValue))
+                break;
+            case OperationType.SnapshotRestore:
                 {
-                    changedValue = (true, changedValue.Value);
+                    var entry = (EntityEntry)op.Data1;
+                    entry.CurrentValues.SetValues((PropertyValues)op.Data2);
                 }
-            }
+                break;
         }
+    }
+
+    private enum OperationType { Detach, StateRestore, SnapshotRestore, PropertyRestore }
+
+    private readonly struct Operation(OperationType type)
+    {
+        public readonly OperationType Type = type;
+        public object Data1 { get; private init; } = null!;
+        public object Data2 { get; private init; } = null!;
+
+        public static Operation Detach(EntityEntry entry)
+            => new(OperationType.Detach) { Data1 = entry };
+
+        public static Operation StateRestore(EntityEntry entry, EntityState previousState)
+            => new(OperationType.StateRestore) { Data1 = entry, Data2 = previousState };
+
+        public static Operation SnapshotRestore(EntityEntry entry, PropertyValues snapshot)
+            => new(OperationType.SnapshotRestore) { Data1 = entry, Data2 = snapshot };
+
+        public static Operation PropertyRestore(EntityEntry entry)
+            => new(OperationType.PropertyRestore) { Data1 = entry };
     }
 }
