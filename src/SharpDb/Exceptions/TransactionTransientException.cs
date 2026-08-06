@@ -9,7 +9,7 @@ public sealed class TransactionTransientException : TransactionException
     public TransactionTransientException(string originalErrorMessage, Exception e) : base(originalErrorMessage, e)
     {
         DbException? dbException = e.GetTransientDbError()
-            ?? throw new ArgumentException("No transient database error found in the exception chain.", nameof(e));
+            ?? throw new ArgumentException(Resources.Text_Error_Transaction_NoTransientErrorFound, nameof(e));
         DbException = dbException;
     }
 
