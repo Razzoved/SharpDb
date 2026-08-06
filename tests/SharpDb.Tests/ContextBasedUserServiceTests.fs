@@ -8,14 +8,14 @@ module ContextBaseUserServiceTests =
 
     type DummyUser() =
         interface IUser with
-            member _.GetID() = 42 :> obj
+            member _.GetId() = 42 :> obj
             member _.GetDisplayName() = "Test User"
 
     [<Fact>]
     let ``GetCurrentUser returns None when no user is set`` () =
         let service = ContextBasedUserService()
         Assert.Null(service.GetCurrentUser())
-        Assert.Null(service.GetCurrentUserID())
+        Assert.Null(service.GetCurrentUserId())
         Assert.Null(service.GetCurrentUserDisplayName())
 
     [<Fact>]
@@ -24,7 +24,7 @@ module ContextBaseUserServiceTests =
         let user = DummyUser() :> IUser
         use _ctx = new ContextBasedUserService.UserContext(user)
         Assert.Equal(user, service.GetCurrentUser())
-        Assert.Equal(42, service.GetCurrentUserID() :?> int)
+        Assert.Equal(42, service.GetCurrentUserId() :?> int)
         Assert.Equal("Test User", service.GetCurrentUserDisplayName())
 
     [<Fact>]
