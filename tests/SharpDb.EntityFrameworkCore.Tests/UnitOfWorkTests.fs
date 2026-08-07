@@ -1,12 +1,12 @@
 ﻿namespace SharpDb.EntityFrameworkCore.Tests
 
+open System.ComponentModel
 open Microsoft.Data.Sqlite
 open Microsoft.EntityFrameworkCore
 open SharpDb;
 open SharpDb.EntityFrameworkCore
 open SharpDb.EntityFrameworkCore.Repositories
 open System
-open System.Reflection
 open System.Threading.Tasks
 open Xunit
 
@@ -16,17 +16,49 @@ module UnitOfWorkTests =
         member val Id = 0 with get, set
         member val Name = "" with get, set
 
+    type NotifyingDummyEntity() =
+        let propertyChanging = Event<PropertyChangingEventHandler, PropertyChangingEventArgs>()
+        let propertyChanged = Event<PropertyChangedEventHandler, PropertyChangedEventArgs>()
+        let mutable id = 0
+        let mutable name = ""
+
+        member this.Id
+            with get() = id
+            and set(v) =
+                propertyChanging.Trigger(this, PropertyChangingEventArgs("Id")) |> ignore
+                id <- v
+                propertyChanged.Trigger(this, PropertyChangedEventArgs("Id")) |> ignore
+
+        member this.Name
+            with get() = name
+            and set(v) =
+                propertyChanging.Trigger(this, PropertyChangingEventArgs("Name")) |> ignore
+                name <- v
+                propertyChanged.Trigger(this, PropertyChangedEventArgs("Name")) |> ignore
+
+        interface INotifyPropertyChanging with
+            [<CLIEvent>]
+            member _.PropertyChanging = propertyChanging.Publish
+
+        interface INotifyPropertyChanged with
+            [<CLIEvent>]
+            member _.PropertyChanged = propertyChanged.Publish
+
     type DummyDbContext(ctx: DbContextOptions<DummyDbContext>) =
         inherit DbContext(ctx)
-        [<DefaultValue>] val mutable DummyEntities : DbSet<DummyEntity>
+        [<Microsoft.FSharp.Core.DefaultValue>] val mutable DummyEntities : DbSet<DummyEntity>
+        [<Microsoft.FSharp.Core.DefaultValue>] val mutable NotifyingDummyEntities : DbSet<NotifyingDummyEntity>
         override _.OnModelCreating(modelBuilder: ModelBuilder) =
             modelBuilder.Entity<DummyEntity>().HasKey("Id") |> ignore
-            modelBuilder.Entity<DummyEntity>().Property(fun e -> e.Id).ValueGeneratedOnAdd().HasColumnName("id") |> ignore
+            modelBuilder.Entity<DummyEntity>().Property(_.Id).ValueGeneratedOnAdd().HasColumnName("id") |> ignore
+            modelBuilder.Entity<NotifyingDummyEntity>().HasKey("Id") |> ignore
+            modelBuilder.Entity<NotifyingDummyEntity>().Property(_.Id).ValueGeneratedOnAdd().HasColumnName("id") |> ignore
 
     type DummyUnitOfWork(ctxFactory: IDbContextFactory<DummyDbContext>) =
         inherit UnitOfWork<DummyDbContext>(ctxFactory)
         member this.PrivateContext = this.DbContext
         member this.Repository = this.GetRepository(fun ctx -> DefaultRepository<DummyEntity>(ctx))
+        member this.NotifyingRepository = this.GetRepository(fun ctx -> DefaultRepository<NotifyingDummyEntity>(ctx))
 
     type InMemoryContextFactory() =
         interface IDbContextFactory<DummyDbContext> with
@@ -244,6 +276,37 @@ module UnitOfWorkTests =
         Assert.Equal("Test", entity.Name)
 
     [<Fact>]
+    let ``InTransaction rolls back to previous state and values on exception for notifying entity`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+        let entity = NotifyingDummyEntity()
+        entity.Name <- "Test"
+        Assert.Empty(uow.PrivateContext.Set<NotifyingDummyEntity>().Local) |> ignore
+        uow.NotifyingRepository.Add(entity) |> ignore
+        Assert.Single(uow.PrivateContext.Set<NotifyingDummyEntity>().Local) |> ignore
+        let result = uow.InTransaction(fun () ->
+            Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Added)
+            entity.Name <- "Changed1"
+            uow.SaveChanges() |> ignore
+            Assert.True(uow.PrivateContext.Set<NotifyingDummyEntity>().AnyAsync(fun e -> e.Name = "Changed1") |> Async.AwaitTask |> Async.RunSynchronously)
+            Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Unchanged)
+            entity.Name <- "Changed2"
+            uow.NotifyingRepository.Update(entity) |> ignore
+            Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Modified)
+            uow.SaveChanges() |> ignore
+            Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Unchanged)
+            Assert.True(uow.PrivateContext.Set<NotifyingDummyEntity>().AnyAsync(fun e -> e.Name = "Changed2") |> Async.AwaitTask |> Async.RunSynchronously)
+            raise (Exception("Test exception"))
+        )
+        Assert.False(result.IsSuccess)
+        Assert.False(uow.PrivateContext.Set<NotifyingDummyEntity>().AnyAsync(fun e -> e.Name = "Changed2") |> Async.AwaitTask |> Async.RunSynchronously)
+        Assert.False(uow.PrivateContext.Set<NotifyingDummyEntity>().AnyAsync(fun e -> e.Name = "Changed1") |> Async.AwaitTask |> Async.RunSynchronously)
+        Assert.False(uow.PrivateContext.Set<NotifyingDummyEntity>().AnyAsync(fun e -> e.Name = "Test") |> Async.AwaitTask |> Async.RunSynchronously)
+        Assert.Single(uow.PrivateContext.Set<NotifyingDummyEntity>().Local) |> ignore
+        Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Added)
+        Assert.Equal("Test", entity.Name)
+
+    [<Fact>]
     let ``TransactionContext flows with async but is isolated per UnitOfWork`` () =
         use dbContextFactory1 = new SqliteContextFactory()
         use dbContextFactory2 = new SqliteContextFactory()
@@ -410,6 +473,27 @@ module UnitOfWorkTests =
         Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
 
     [<Fact>]
+    let ``InTransaction with ActionState aborts early on validation failure for notifying entity`` () =
+        use dbContextFactory = new SqliteContextFactory()
+        use uow = new DummyUnitOfWork(dbContextFactory)
+        let entity = NotifyingDummyEntity()
+        entity.Name <- "Test"
+        let result = uow.InTransaction(fun () ->
+            uow.NotifyingRepository.Add(entity) |> ignore
+            uow.SaveChanges() |> ignore
+            if entity.Name = "Test" then
+                ActionState.Abort("Validation failed: Name cannot be 'Test'")
+            else
+                entity.Name <- "Test2"
+                uow.NotifyingRepository.Update(entity) |> ignore
+                uow.SaveChanges() |> ignore
+                ActionState.Complete()
+        )
+        Assert.False(result.IsSuccess)
+        Assert.Contains("Validation failed: Name cannot be 'Test'", result.Error.Message)
+        Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+
+    [<Fact>]
     let ``InTransaction with ActionState aborts with custom error`` () =
         use dbContextFactory = new SqliteContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
@@ -489,6 +573,29 @@ module UnitOfWorkTests =
                 else
                     entity.Name <- "Test2"
                     uow.Repository.Update(entity) |> ignore
+                    let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
+                    return ActionState.Complete()
+            })
+            Assert.False(result.IsSuccess)
+            Assert.Contains("Async validation failed", result.Error.Message)
+            Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
+        }
+
+    [<Fact>]
+    let ``InTransactionAsync with ActionState aborts early on validation failure for notifying entity`` () : Task =
+        task {
+            use dbContextFactory = new SqliteContextFactory()
+            use uow = new DummyUnitOfWork(dbContextFactory)
+            let entity = NotifyingDummyEntity()
+            entity.Name <- "Test"
+            let! result = uow.InTransactionAsync(fun () -> task {
+                uow.NotifyingRepository.Add(entity) |> ignore
+                let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
+                if entity.Name = "Test" then
+                    return ActionState.Abort("Async validation failed")
+                else
+                    entity.Name <- "Test2"
+                    uow.NotifyingRepository.Update(entity) |> ignore
                     let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
                     return ActionState.Complete()
             })
