@@ -24,17 +24,17 @@ module UnitOfWorkTests =
 
         member this.Id
             with get() = id
-            and set(v) =
-                propertyChanging.Trigger(this, PropertyChangingEventArgs("Id")) |> ignore
+            and set v =
+                propertyChanging.Trigger(this, PropertyChangingEventArgs("Id"))
                 id <- v
-                propertyChanged.Trigger(this, PropertyChangedEventArgs("Id")) |> ignore
+                propertyChanged.Trigger(this, PropertyChangedEventArgs("Id"))
 
         member this.Name
             with get() = name
-            and set(v) =
-                propertyChanging.Trigger(this, PropertyChangingEventArgs("Name")) |> ignore
+            and set v =
+                propertyChanging.Trigger(this, PropertyChangingEventArgs("Name"))
                 name <- v
-                propertyChanged.Trigger(this, PropertyChangedEventArgs("Name")) |> ignore
+                propertyChanged.Trigger(this, PropertyChangedEventArgs("Name"))
 
         interface INotifyPropertyChanging with
             [<CLIEvent>]
@@ -72,7 +72,7 @@ module UnitOfWorkTests =
 
     type SqliteContextFactory() =
         let connection = new SqliteConnection($"Data Source={Guid.NewGuid()};mode=memory;cache=shared;")
-        interface System.IDisposable with
+        interface IDisposable with
             member _.Dispose() =
                 if connection.State = System.Data.ConnectionState.Open then
                     connection.Close()
@@ -90,7 +90,7 @@ module UnitOfWorkTests =
 
     [<Fact>]
     let ``Attach sets entity state to Unchanged if Detached`` () =
-        let dbContextFactory = new InMemoryContextFactory()
+        let dbContextFactory = InMemoryContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
         uow.PrivateContext.Add(entity) |> ignore
@@ -100,7 +100,7 @@ module UnitOfWorkTests =
 
     [<Fact>]
     let ``Attach does not change entity state if not Detached`` () =
-        let dbContextFactory = new InMemoryContextFactory()
+        let dbContextFactory = InMemoryContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
         uow.PrivateContext.Add(entity) |> ignore
@@ -110,7 +110,7 @@ module UnitOfWorkTests =
 
     [<Fact>]
     let ``Attach adds entity if not tracked`` () =
-        let dbContextFactory = new InMemoryContextFactory()
+        let dbContextFactory = InMemoryContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
         Assert.Equal(EntityState.Detached, uow.PrivateContext.Entry(entity).State)
@@ -119,7 +119,7 @@ module UnitOfWorkTests =
 
     [<Fact>]
     let ``Detach sets entity state to Detached if not Detached`` () =
-        let dbContextFactory = new InMemoryContextFactory()
+        let dbContextFactory = InMemoryContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
         uow.PrivateContext.Add(entity) |> ignore
@@ -128,30 +128,32 @@ module UnitOfWorkTests =
 
     [<Fact>]
     let ``SaveChanges returns affected rows`` () =
-        let dbContextFactory = new InMemoryContextFactory()
+        let dbContextFactory = InMemoryContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
-        uow.Repository.Add(entity) |> ignore
+        uow.Repository.Add(entity)
         let result = uow.SaveChanges()
         Assert.True(result.IsSuccess)
         Assert.Equal(1L, result.AffectedRows)
 
     [<Fact>]
     let ``SaveChangesAsync returns affected rows`` () =
-        let dbContextFactory = new InMemoryContextFactory()
-        use uow = new DummyUnitOfWork(dbContextFactory)
-        let entity = DummyEntity()
-        uow.Repository.Add(entity) |> ignore
-        let result = uow.SaveChangesAsync().Result
-        Assert.True(result.IsSuccess)
-        Assert.Equal(1L, result.AffectedRows)
+        async {
+            let dbContextFactory = InMemoryContextFactory()
+            use uow = new DummyUnitOfWork(dbContextFactory)
+            let entity = DummyEntity()
+            uow.Repository.Add(entity)
+            let! result = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
+            Assert.True(result.IsSuccess)
+            Assert.Equal(1L, result.AffectedRows)
+        }
 
     [<Fact>]
     let ``DiscardChanges clears change tracker`` () =
-        let dbContextFactory = new InMemoryContextFactory()
+        let dbContextFactory = InMemoryContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
-        uow.Repository.Add(entity) |> ignore
+        uow.Repository.Add(entity)
         uow.DiscardChanges()
         Assert.Empty(uow.PrivateContext.ChangeTracker.Entries())
 
@@ -163,7 +165,7 @@ module UnitOfWorkTests =
         entity.Name <- "Test"
         Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
         let result = uow.InTransaction(fun () ->
-            uow.Repository.Add(entity) |> ignore
+            uow.Repository.Add(entity)
             uow.SaveChanges() |> ignore
         )
         Assert.True(result.IsSuccess)
@@ -178,8 +180,8 @@ module UnitOfWorkTests =
             entity.Name <- "Test"
             Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
             let! result = uow.InTransactionAsync(fun () -> task {
-                uow.Repository.Add(entity) |> ignore
-                uow.SaveChangesAsync() |> ignore
+                uow.Repository.Add(entity)
+                uow.SaveChangesAsync().AsTask() |> Async.AwaitTask |> ignore
                 return ActionState.Complete()
             })
             Assert.True(result.IsSuccess)
@@ -194,7 +196,7 @@ module UnitOfWorkTests =
         entity.Name <- "Test"
         Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
         let result = uow.InTransaction(fun () ->
-            uow.Repository.Add(entity) |> ignore
+            uow.Repository.Add(entity)
             uow.SaveChanges() |> ignore
             raise (Exception("Test exception"))
         )
@@ -209,7 +211,7 @@ module UnitOfWorkTests =
         entity.Name <- "Test"
         Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
         let result = uow.InTransaction(fun () ->
-            uow.Repository.Add(entity) |> ignore
+            uow.Repository.Add(entity)
             uow.SaveChanges() |> ignore
             uow.InTransaction(fun () ->
                 let rollbackResult = uow.Sql.RawExecuteAsync("ROLLBACK").AsTask() |> Async.AwaitTask |> Async.RunSynchronously
@@ -228,8 +230,8 @@ module UnitOfWorkTests =
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
         entity.Name <- "Test"
-        Assert.Empty(uow.PrivateContext.Set<DummyEntity>().Local) |> ignore
-        uow.Repository.Add(entity) |> ignore
+        Assert.Empty(uow.PrivateContext.Set<DummyEntity>().Local)
+        uow.Repository.Add(entity)
         Assert.Single(uow.PrivateContext.Set<DummyEntity>().Local) |> ignore
         let result = uow.InTransaction(fun () ->
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Added)
@@ -250,8 +252,8 @@ module UnitOfWorkTests =
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = DummyEntity()
         entity.Name <- "Test"
-        Assert.Empty(uow.PrivateContext.Set<DummyEntity>().Local) |> ignore
-        uow.Repository.Add(entity) |> ignore
+        Assert.Empty(uow.PrivateContext.Set<DummyEntity>().Local)
+        uow.Repository.Add(entity)
         Assert.Single(uow.PrivateContext.Set<DummyEntity>().Local) |> ignore
         let result = uow.InTransaction(fun () ->
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Added)
@@ -260,7 +262,7 @@ module UnitOfWorkTests =
             Assert.True(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = "Changed1") |> Async.AwaitTask |> Async.RunSynchronously)
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Unchanged)
             entity.Name <- "Changed2"
-            uow.Repository.Update(entity) |> ignore
+            uow.Repository.Update(entity)
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Modified)
             uow.SaveChanges() |> ignore
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Unchanged)
@@ -281,8 +283,8 @@ module UnitOfWorkTests =
         use uow = new DummyUnitOfWork(dbContextFactory)
         let entity = NotifyingDummyEntity()
         entity.Name <- "Test"
-        Assert.Empty(uow.PrivateContext.Set<NotifyingDummyEntity>().Local) |> ignore
-        uow.NotifyingRepository.Add(entity) |> ignore
+        Assert.Empty(uow.PrivateContext.Set<NotifyingDummyEntity>().Local)
+        uow.NotifyingRepository.Add(entity)
         Assert.Single(uow.PrivateContext.Set<NotifyingDummyEntity>().Local) |> ignore
         let result = uow.InTransaction(fun () ->
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Added)
@@ -291,7 +293,7 @@ module UnitOfWorkTests =
             Assert.True(uow.PrivateContext.Set<NotifyingDummyEntity>().AnyAsync(fun e -> e.Name = "Changed1") |> Async.AwaitTask |> Async.RunSynchronously)
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Unchanged)
             entity.Name <- "Changed2"
-            uow.NotifyingRepository.Update(entity) |> ignore
+            uow.NotifyingRepository.Update(entity)
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Modified)
             uow.SaveChanges() |> ignore
             Assert.Equal(uow.PrivateContext.Entry(entity).State, EntityState.Unchanged)
@@ -320,7 +322,7 @@ module UnitOfWorkTests =
             transactionId1 <- TransactionContext.GetCurrent(uow1.PrivateContext.Database).GetHashCode() |> Nullable
             let r2 = uow2.InTransaction(fun () ->
                 transactionId2 <- TransactionContext.GetCurrent(uow2.PrivateContext.Database).GetHashCode() |> Nullable
-                uow2.Repository.Add(DummyEntity(Name = "B")) |> ignore
+                uow2.Repository.Add(DummyEntity(Name = "B"))
                 Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow2.PrivateContext.Database).AffectedRows |> int64)
                 uow2.SaveChanges() |> ignore
                 Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow2.PrivateContext.Database).AffectedRows |> int64)
@@ -329,7 +331,7 @@ module UnitOfWorkTests =
             Assert.Equal<int64>(1, r2.AffectedRows)
             Assert.Null(TransactionContext.GetCurrent(uow2.PrivateContext.Database))
             Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow1.PrivateContext.Database).AffectedRows |> int64)
-            uow1.Repository.Add(DummyEntity(Name = "A")) |> ignore
+            uow1.Repository.Add(DummyEntity(Name = "A"))
             uow1.SaveChanges() |> ignore
             Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow1.PrivateContext.Database).AffectedRows |> int64)
         )
@@ -343,7 +345,7 @@ module UnitOfWorkTests =
         Assert.NotEqual(transactionId1, transactionId2)
 
     [<Fact>]
-    let ``TransactionContext flows with async and rollsback on error`` () =
+    let ``TransactionContext flows with async and rollbacks on error`` () =
         use dbContextFactory = new SqliteContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
 
@@ -355,13 +357,13 @@ module UnitOfWorkTests =
             transactionId1 <- TransactionContext.GetCurrent(uow.PrivateContext.Database).GetHashCode() |> Nullable
             let r2 = uow.InTransaction(fun () ->
                 transactionId2 <- TransactionContext.GetCurrent(uow.PrivateContext.Database).GetHashCode() |> Nullable
-                uow.Repository.Add(DummyEntity(Name = "B")) |> ignore
+                uow.Repository.Add(DummyEntity(Name = "B"))
                 Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
                 uow.SaveChanges() |> ignore
                 Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
                 let r3 = uow.InTransaction(fun () ->
                     transactionId3 <- TransactionContext.GetCurrent(uow.PrivateContext.Database).GetHashCode() |> Nullable
-                    uow.Repository.Add(DummyEntity(Name = "C")) |> ignore
+                    uow.Repository.Add(DummyEntity(Name = "C"))
                     Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
                     uow.SaveChanges() |> ignore
                     Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
@@ -374,7 +376,7 @@ module UnitOfWorkTests =
             Assert.False(r2.IsSuccess)
             Assert.Equal<int64>(0, r2.AffectedRows)
             Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
-            uow.Repository.Add(DummyEntity(Name = "A")) |> ignore
+            uow.Repository.Add(DummyEntity(Name = "A"))
             uow.SaveChanges() |> ignore
             Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
         )
@@ -390,7 +392,7 @@ module UnitOfWorkTests =
         Assert.Equal(transactionId1, transactionId3)
 
     [<Fact>]
-    let ``TransactionContext flows with async and rollsback on deep inner error`` () =
+    let ``TransactionContext flows with async and rollbacks on deep inner error`` () =
         use dbContextFactory = new SqliteContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
 
@@ -402,13 +404,13 @@ module UnitOfWorkTests =
             transactionId1 <- TransactionContext.GetCurrent(uow.PrivateContext.Database).GetHashCode() |> Nullable
             let r2 = uow.InTransaction(fun () ->
                 transactionId2 <- TransactionContext.GetCurrent(uow.PrivateContext.Database).GetHashCode() |> Nullable
-                uow.Repository.Add(DummyEntity(Name = "B")) |> ignore
+                uow.Repository.Add(DummyEntity(Name = "B"))
                 Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
                 uow.SaveChanges() |> ignore
                 Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
                 let r3 = uow.InTransaction(fun () ->
                     transactionId3 <- TransactionContext.GetCurrent(uow.PrivateContext.Database).GetHashCode() |> Nullable
-                    uow.Repository.Add(DummyEntity(Name = "C")) |> ignore
+                    uow.Repository.Add(DummyEntity(Name = "C"))
                     Assert.Equal<int64>(0, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
                     uow.SaveChanges() |> ignore
                     Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
@@ -421,7 +423,7 @@ module UnitOfWorkTests =
             Assert.True(r2.IsSuccess)
             Assert.Equal<int64>(1, r2.AffectedRows)
             Assert.Equal<int64>(1, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
-            uow.Repository.Add(DummyEntity(Name = "A")) |> ignore
+            uow.Repository.Add(DummyEntity(Name = "A"))
             uow.SaveChanges() |> ignore
             Assert.Equal<int64>(2, TransactionContext.GetCurrent(uow.PrivateContext.Database).AffectedRows |> int64)
         )
@@ -444,7 +446,7 @@ module UnitOfWorkTests =
         entity.Name <- "Test"
         Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
         let result = uow.InTransaction(fun () ->
-            uow.Repository.Add(entity) |> ignore
+            uow.Repository.Add(entity)
             uow.SaveChanges() |> ignore
             ActionState.Complete()
         )
@@ -458,13 +460,13 @@ module UnitOfWorkTests =
         let entity = DummyEntity()
         entity.Name <- "Test"
         let result = uow.InTransaction(fun () ->
-            uow.Repository.Add(entity) |> ignore
+            uow.Repository.Add(entity)
             uow.SaveChanges() |> ignore
             if entity.Name = "Test" then
                 ActionState.Abort("Validation failed: Name cannot be 'Test'")
             else
                 entity.Name <- "Test2"
-                uow.Repository.Update(entity) |> ignore
+                uow.Repository.Update(entity)
                 uow.SaveChanges() |> ignore
                 ActionState.Complete()
         )
@@ -479,13 +481,13 @@ module UnitOfWorkTests =
         let entity = NotifyingDummyEntity()
         entity.Name <- "Test"
         let result = uow.InTransaction(fun () ->
-            uow.NotifyingRepository.Add(entity) |> ignore
+            uow.NotifyingRepository.Add(entity)
             uow.SaveChanges() |> ignore
             if entity.Name = "Test" then
                 ActionState.Abort("Validation failed: Name cannot be 'Test'")
             else
                 entity.Name <- "Test2"
-                uow.NotifyingRepository.Update(entity) |> ignore
+                uow.NotifyingRepository.Update(entity)
                 uow.SaveChanges() |> ignore
                 ActionState.Complete()
         )
@@ -500,7 +502,7 @@ module UnitOfWorkTests =
         let entity = DummyEntity()
         entity.Name <- "Test"
         let result = uow.InTransaction(fun () ->
-            uow.Repository.Add(entity) |> ignore
+            uow.Repository.Add(entity)
             uow.SaveChanges() |> ignore
             ActionState.Abort(StringDbError("Custom error message"))
         )
@@ -517,8 +519,8 @@ module UnitOfWorkTests =
         let entity2 = DummyEntity()
         entity2.Name <- "Test2"
         let result = uow.InTransaction(fun () ->
-            uow.Repository.Add(entity1) |> ignore
-            uow.Repository.Add(entity2) |> ignore
+            uow.Repository.Add(entity1)
+            uow.Repository.Add(entity2)
             uow.SaveChanges() |> ignore
             ActionState.Complete()
         )
@@ -532,7 +534,7 @@ module UnitOfWorkTests =
         let entity = DummyEntity()
         entity.Name <- "Test"
         let result = uow.InTransaction(fun () ->
-            uow.Repository.Add(entity) |> ignore
+            uow.Repository.Add(entity)
             uow.SaveChanges() |> ignore
             raise (Exception("Unexpected exception"))
             ActionState.Complete()
@@ -550,7 +552,7 @@ module UnitOfWorkTests =
             entity.Name <- "Test"
             Assert.False(uow.PrivateContext.Set<DummyEntity>().AnyAsync(fun e -> e.Name = entity.Name) |> Async.AwaitTask |> Async.RunSynchronously)
             let! result = uow.InTransactionAsync(fun () -> task {
-                uow.Repository.Add(entity) |> ignore
+                uow.Repository.Add(entity)
                 let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
                 return ActionState.Complete()
             })
@@ -566,13 +568,13 @@ module UnitOfWorkTests =
             let entity = DummyEntity()
             entity.Name <- "Test"
             let! result = uow.InTransactionAsync(fun () -> task {
-                uow.Repository.Add(entity) |> ignore
+                uow.Repository.Add(entity)
                 let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
                 if entity.Name = "Test" then
                     return ActionState.Abort("Async validation failed")
                 else
                     entity.Name <- "Test2"
-                    uow.Repository.Update(entity) |> ignore
+                    uow.Repository.Update(entity)
                     let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
                     return ActionState.Complete()
             })
@@ -589,13 +591,13 @@ module UnitOfWorkTests =
             let entity = NotifyingDummyEntity()
             entity.Name <- "Test"
             let! result = uow.InTransactionAsync(fun () -> task {
-                uow.NotifyingRepository.Add(entity) |> ignore
+                uow.NotifyingRepository.Add(entity)
                 let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
                 if entity.Name = "Test" then
                     return ActionState.Abort("Async validation failed")
                 else
                     entity.Name <- "Test2"
-                    uow.NotifyingRepository.Update(entity) |> ignore
+                    uow.NotifyingRepository.Update(entity)
                     let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
                     return ActionState.Complete()
             })
@@ -614,8 +616,8 @@ module UnitOfWorkTests =
             let entity2 = DummyEntity()
             entity2.Name <- "Test2"
             let! result = uow.InTransactionAsync(fun () -> task {
-                uow.Repository.Add(entity1) |> ignore
-                uow.Repository.Add(entity2) |> ignore
+                uow.Repository.Add(entity1)
+                uow.Repository.Add(entity2)
                 let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
                 return ActionState.Complete()
             })
@@ -631,7 +633,7 @@ module UnitOfWorkTests =
             let entity = DummyEntity()
             entity.Name <- "Test"
             let! result = uow.InTransactionAsync(fun () -> task {
-                uow.Repository.Add(entity) |> ignore
+                uow.Repository.Add(entity)
                 let! _ = uow.SaveChangesAsync().AsTask() |> Async.AwaitTask
                 raise (Exception("Async unexpected exception"))
                 return ActionState.Complete()
@@ -650,7 +652,7 @@ module UnitOfWorkTests =
         let entity2 = DummyEntity()
         entity2.Name <- "Test2"
         let result = uow.InTransaction(fun () ->
-            uow.Repository.Add(entity1) |> ignore
+            uow.Repository.Add(entity1)
             uow.SaveChanges() |> ignore
             // Abort after first save
             ActionState.Abort(StringDbError("Aborting after partial work"))
@@ -665,10 +667,10 @@ module UnitOfWorkTests =
         use dbContextFactory = new SqliteContextFactory()
         use uow = new DummyUnitOfWork(dbContextFactory)
         let result = uow.InTransaction(fun () ->
-            uow.Repository.Add(DummyEntity(Name = "Outer")) |> ignore
+            uow.Repository.Add(DummyEntity(Name = "Outer"))
             uow.SaveChanges() |> ignore
             let innerResult = uow.InTransaction(fun () ->
-                uow.Repository.Add(DummyEntity(Name = "Inner")) |> ignore
+                uow.Repository.Add(DummyEntity(Name = "Inner"))
                 uow.SaveChanges() |> ignore
                 ActionState.Abort(StringDbError("Inner aborted"))
             )
