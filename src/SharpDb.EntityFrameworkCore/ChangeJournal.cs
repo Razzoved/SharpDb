@@ -9,96 +9,115 @@ internal sealed class ChangeJournal : IChangeJournal
     private const int InitialCapacity = 32;
 
     private readonly DbContext _db;
-    private readonly HashSet<object> _tracked = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<object, Dictionary<string, object?>> _entitySnapshots = new(InitialCapacity / 2, ReferenceEqualityComparer.Instance);
-    private readonly Stack<Operation> _ops = new(InitialCapacity);
+    private readonly Dictionary<INotifyPropertyChanging, int> _trackingChanges = new(InitialCapacity, ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<INotifyPropertyChanging, Dictionary<PropertyKey, object?>> _changed = new(InitialCapacity, ReferenceEqualityComparer.Instance);
+    private readonly Stack<Operation> _ops = new(InitialCapacity * 2);
 
-    private bool _stopped = true;
-    private bool _restored;
+    private int _currentSavepointId;
 
     public ChangeJournal(DbContext db)
     {
         ArgumentNullException.ThrowIfNull(db);
         _db = db;
-
-        // Capture existing tracked entities, otherwise they would be missed
-        // I might improve this later on, but for now this should be sufficient.
-        foreach (var entry in _db.ChangeTracker.Entries())
-        {
-            if (_tracked.Add(entry.Entity))
-            {
-                CaptureValues(entry);
-            }
-        }
     }
 
     public void Start()
     {
-        _stopped = false;
-        _db.ChangeTracker.Tracked += OnEntityTracked;
-        _db.ChangeTracker.StateChanged += OnEntityStateChanged;
+        if (_currentSavepointId == 0)
+        {
+            _db.ChangeTracker.Tracked += OnEntityTracked;
+            _db.ChangeTracker.StateChanged += OnEntityStateChanged;
+        }
+        _ops.Push(Operation.SavePoint(ref _currentSavepointId));
+        foreach (var entry in _db.ChangeTracker.Entries())
+        {
+            _ops.Push(Operation.StateRestore(entry, entry.State));
+            CaptureValues(entry);
+        }
     }
 
     public void Stop()
     {
-        if (!_stopped)
+        _db.ChangeTracker.Tracked -= OnEntityTracked;
+        _db.ChangeTracker.StateChanged -= OnEntityStateChanged;
+
+        // Release savepoint
+        while (_ops.TryPop(out var op))
         {
-            _stopped = true;
-            _db.ChangeTracker.StateChanged -= OnEntityStateChanged;
-            _db.ChangeTracker.Tracked -= OnEntityTracked;
+            if (op.Type == OperationType.SavePoint)
+            {
+                _currentSavepointId = (int)op.Data1;
+                break;
+            }
+            ReleaseOperation(op);
+        }
+
+        // Reduce capacity to avoid memory overhead
+        _trackingChanges.TrimExcess(InitialCapacity);
+        _changed.TrimExcess(InitialCapacity);
+#if NET10_0_OR_GREATER
+        _ops.TrimExcess(InitialCapacity * 2);
+#else
+        _ops.TrimExcess();
+#endif
+
+        if (_currentSavepointId > 0)
+        {
+            _db.ChangeTracker.Tracked += OnEntityTracked;
+            _db.ChangeTracker.StateChanged += OnEntityStateChanged;
         }
     }
 
     public void Restore()
     {
-        if (!_restored)
+        if (_ops.TryPeek(out var op) && op.Type != OperationType.SavePoint)
         {
-            Stop();
-            while (_ops.Count > 0)
+            _db.ChangeTracker.Tracked -= OnEntityTracked;
+            _db.ChangeTracker.StateChanged -= OnEntityStateChanged;
+
+            while (_ops.TryPop(out op))
             {
-                Undo(_ops.Pop());
+                if (op.Type == OperationType.SavePoint)
+                {
+                    _ops.Push(op);
+                    break;
+                }
+                UndoOperation(op);
             }
-            _tracked.Clear();
-            _restored = true;
+
+            _db.ChangeTracker.Tracked += OnEntityTracked;
+            _db.ChangeTracker.StateChanged += OnEntityStateChanged;
         }
     }
 
     private void OnEntityTracked(object? sender, EntityTrackedEventArgs e)
     {
-        var entry = e.Entry;
-        if (_tracked.Add(entry.Entity))
-        {
-            _ops.Push(Operation.Detach(entry));
-            CaptureValues(entry);
-        }
+        _ops.Push(Operation.Detach(e.Entry));
+        CaptureValues(e.Entry);
     }
 
     private void OnEntityStateChanged(object? sender, EntityStateChangedEventArgs e)
     {
-        var entry = e.Entry;
-        _ops.Push(Operation.StateRestore(entry, e.OldState));
-        if (_tracked.Add(entry.Entity))
-        {
-            CaptureValues(entry);
-        }
+        _ops.Push(Operation.StateRestore(e.Entry, e.OldState));
     }
 
     private void OnEntityPropertyChanging(object? sender, PropertyChangingEventArgs e)
     {
-        if (sender is not null && e.PropertyName is not null)
+        if (sender is not INotifyPropertyChanging notifier || e.PropertyName is null) return;
+
+        // Create snapshot dictionary if needed
+        if (!_changed.TryGetValue(notifier, out var dict))
         {
-            // Create snapshot dictionary if needed
-            if (!_entitySnapshots.TryGetValue(sender, out var dict))
-            {
-                dict = new Dictionary<string, object?>(4);
-                _entitySnapshots.Add(sender, dict);
-            }
-            // Take snapshot on FIRST change of property only
-            if (!dict.ContainsKey(e.PropertyName))
-            {
-                object? currentValue = _db.Entry(sender).CurrentValues[e.PropertyName];
-                dict.Add(e.PropertyName, currentValue);
-            }
+            dict = new Dictionary<PropertyKey, object?>(4);
+            _changed.Add(notifier, dict);
+        }
+
+        // Take snapshot on FIRST change of property only
+        PropertyKey propertyKey = new(_currentSavepointId, e.PropertyName);
+        if (!dict.ContainsKey(propertyKey))
+        {
+            object? currentValue = _db.Entry(sender).CurrentValues[propertyKey.PropertyName];
+            dict.Add(propertyKey, currentValue);
         }
     }
 
@@ -106,7 +125,8 @@ internal sealed class ChangeJournal : IChangeJournal
     {
         if (entry.Entity is INotifyPropertyChanging notifier)
         {
-            notifier.PropertyChanging += OnEntityPropertyChanging;
+            if (_trackingChanges.TryAdd(notifier, _currentSavepointId))
+                notifier.PropertyChanging += OnEntityPropertyChanging;
             _ops.Push(Operation.PropertyRestore(entry));
         }
         else
@@ -115,7 +135,33 @@ internal sealed class ChangeJournal : IChangeJournal
         }
     }
 
-    private void Undo(in Operation op)
+    private void ReleaseOperation(in Operation op)
+    {
+        if (op.Type == OperationType.PropertyRestore)
+        {
+            var entry = (EntityEntry)op.Data1;
+            var notifier = (INotifyPropertyChanging)entry.Entity;
+            if (_trackingChanges.TryGetValue(notifier, out int savePointId))
+            {
+                if (savePointId >= _currentSavepointId)
+                {
+                    notifier.PropertyChanging -= OnEntityPropertyChanging;
+                    _changed.Remove(notifier);
+                    _trackingChanges.Remove(notifier);
+                }
+                else if (_changed.TryGetValue(notifier, out var dict))
+                {
+                    foreach (var d in dict.Keys.Where(x => x.SavePointId == savePointId).ToArray())
+                    {
+                        dict.Remove(d);
+                    }
+                    if (dict.Count == 0) _changed.Remove(notifier);
+                }
+            }
+        }
+    }
+
+    private void UndoOperation(in Operation op)
     {
         switch (op.Type)
         {
@@ -125,24 +171,44 @@ internal sealed class ChangeJournal : IChangeJournal
                     entry.State = EntityState.Detached;
                 }
                 break;
-            case OperationType.PropertyRestore:
-                {
-                    var entry = (EntityEntry)op.Data1;
-                    ((INotifyPropertyChanging)entry.Entity).PropertyChanging -= OnEntityPropertyChanging;
-                    if (_entitySnapshots.TryGetValue(entry.Entity, out var dict))
-                    {
-                        foreach (var d in dict)
-                        {
-                            entry.CurrentValues[d.Key] = d.Value;
-                        }
-                        _entitySnapshots.Remove(entry);
-                    }
-                }
-                break;
             case OperationType.StateRestore:
                 {
                     var entry = (EntityEntry)op.Data1;
                     entry.State = (EntityState)op.Data2;
+                }
+                break;
+            case OperationType.PropertyRestore:
+                {
+                    var entry = (EntityEntry)op.Data1;
+                    var notifier = (INotifyPropertyChanging)entry.Entity;
+                    if (_trackingChanges.TryGetValue(notifier, out int savePointId))
+                    {
+                        notifier.PropertyChanging -= OnEntityPropertyChanging;
+
+                        if (_changed.TryGetValue(notifier, out var dict))
+                        {
+                            List<PropertyKey> toRemove = [];
+                            foreach (var d in dict)
+                            {
+                                if (d.Key.SavePointId == _currentSavepointId)
+                                {
+                                    var prop = entry.Metadata.FindProperty(d.Key.PropertyName);
+                                    if (prop is not null)
+                                        entry.CurrentValues[prop] = d.Value;
+                                    else
+                                        entry.Metadata.ClrType?.GetProperty(d.Key.PropertyName)?.SetValue(entry.Entity, d.Value);
+                                    toRemove.Add(d.Key);
+                                }
+                            }
+                            foreach (var key in toRemove) dict.Remove(key);
+                            if (dict.Count == 0) _changed.Remove(notifier);
+                        }
+
+                        if (savePointId >= _currentSavepointId)
+                            _trackingChanges.Remove(notifier);
+                        else
+                            notifier.PropertyChanging += OnEntityPropertyChanging;
+                    }
                 }
                 break;
             case OperationType.SnapshotRestore:
@@ -154,13 +220,16 @@ internal sealed class ChangeJournal : IChangeJournal
         }
     }
 
-    private enum OperationType { Detach, StateRestore, SnapshotRestore, PropertyRestore }
+    private enum OperationType { SavePoint, Detach, StateRestore, SnapshotRestore, PropertyRestore }
 
     private readonly struct Operation(OperationType type)
     {
         public readonly OperationType Type = type;
         public object Data1 { get; private init; } = null!;
         public object Data2 { get; private init; } = null!;
+
+        public static Operation SavePoint(ref int savePointId)
+            => new(OperationType.SavePoint) { Data1 = Interlocked.Increment(ref savePointId) };
 
         public static Operation Detach(EntityEntry entry)
             => new(OperationType.Detach) { Data1 = entry };
@@ -174,4 +243,6 @@ internal sealed class ChangeJournal : IChangeJournal
         public static Operation PropertyRestore(EntityEntry entry)
             => new(OperationType.PropertyRestore) { Data1 = entry };
     }
+
+    private readonly record struct PropertyKey(int SavePointId, string PropertyName);
 }
