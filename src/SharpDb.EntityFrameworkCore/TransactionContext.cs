@@ -24,8 +24,7 @@ internal sealed class TransactionContext : IDisposable
         local.Value ??= new ModifiableValue();
 
         _previous = local.Value.Context;
-        ChangeJournal = new ChangeJournal(dbContext);
-        _previous?.ChangeJournal.Stop();
+        ChangeJournal = _previous?.ChangeJournal ?? new ChangeJournal(dbContext);
         ChangeJournal.Start();
 
         local.Value.Context = this;
@@ -65,7 +64,6 @@ internal sealed class TransactionContext : IDisposable
         {
             if (_previous is not null)
             {
-                _previous.ChangeJournal.Start();
                 _previous.AffectedRows += AffectedRows;
             }
             local.Value.Context = _previous;
