@@ -28,6 +28,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "SharpDb.Cryptography.Tests"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "SharpDb.EntityFrameworkCore.Tests", "tests\SharpDb.EntityFrameworkCore.Tests\SharpDb.EntityFrameworkCore.Tests.fsproj", "{20ADC9FA-2C5D-4686-B2F7-578066A3DD79}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "SharpDb.EntityFrameworkCore.Benchmarks", "tests\SharpDb.EntityFrameworkCore.Benchmarks\SharpDb.EntityFrameworkCore.Benchmarks.fsproj", "{8C6CBF8C-6225-4E4F-A835-905F341D32FD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -58,6 +60,10 @@ Global
 		{20ADC9FA-2C5D-4686-B2F7-578066A3DD79}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{20ADC9FA-2C5D-4686-B2F7-578066A3DD79}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{20ADC9FA-2C5D-4686-B2F7-578066A3DD79}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8C6CBF8C-6225-4E4F-A835-905F341D32FD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C6CBF8C-6225-4E4F-A835-905F341D32FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C6CBF8C-6225-4E4F-A835-905F341D32FD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C6CBF8C-6225-4E4F-A835-905F341D32FD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -69,6 +75,7 @@ Global
 		{20F6E2CC-77E2-4057-97D4-364EA865FEE8} = {1584530F-65F0-4A46-BB70-2238EAC7DD14}
 		{C7ED9F30-582D-4E2E-BC68-798AD138FC66} = {1584530F-65F0-4A46-BB70-2238EAC7DD14}
 		{20ADC9FA-2C5D-4686-B2F7-578066A3DD79} = {1584530F-65F0-4A46-BB70-2238EAC7DD14}
+		{8C6CBF8C-6225-4E4F-A835-905F341D32FD} = {1584530F-65F0-4A46-BB70-2238EAC7DD14}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {598F69AE-2185-4700-B001-44B0AEB9EE10}
