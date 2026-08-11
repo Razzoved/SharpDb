@@ -31,13 +31,9 @@ public static partial class QueryableExtensions
     {
         if (e is TransactionTransientException)
             throw e;
-        try
-        {
-            if (GetDbContext(query) is { } context
-                && TransactionContext.GetCurrent(context.Database) is not null
-                && e.HasTransientDbError())
-                throw new TransactionTransientException(e);
-        }
-        catch { }
+        if (GetDbContext(query) is { } context
+            && TransactionContext.GetCurrent(context.Database) is not null
+            && e.HasTransientDbError())
+            throw new TransactionTransientException(e);
     }
 }
