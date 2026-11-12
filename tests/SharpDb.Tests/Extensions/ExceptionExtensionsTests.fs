@@ -134,9 +134,13 @@ module ExceptionExtensionsTests =
     let ``ThrowIfFailed with apply applies error transformation`` () =
         let error = StringDbError("Test error")
         let result = TestDbResult(false, error) :> IDbResult
-        let apply (e: IDbError) = e.Prefix("Context:")
+        let mutable applyCount = 0
+        let apply (e: IDbError) =
+            applyCount <- applyCount + 1
+            e.Prefix("Context:")
         let ex = Assert.Throws<Exception>(fun () -> result.ThrowIfFailed(apply) |> ignore)
-        Assert.Contains("Context:", ex.Message)
+        Assert.Equal(1, applyCount)
+        Assert.Equal("Context: - Test error", ex.Message)
 
     [<Fact>]
     let ``ThrowIfFailed with apply does not throw when apply returns NoDbError`` () =
