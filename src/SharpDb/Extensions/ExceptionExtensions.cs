@@ -32,7 +32,14 @@ public static class ExceptionExtensions
         => result.IsSuccess ? result : throw result.Error.ToException();
 
     public static TResult ThrowIfFailed<TResult>(this TResult result, Func<IDbError, IDbError> apply) where TResult : IDbResult
-        => result.IsSuccess || apply(result.Error) is NoDbError ? result : throw apply(result.Error).ToException();
+    {
+        if (result.IsSuccess)
+            return result;
+        var appliedResult = apply(result.Error);
+        if (appliedResult is NoDbError)
+            return result;
+        throw appliedResult.ToException();
+    }
 
     public static Task<TResult> ThrowIfFailed<TResult>(this Task<TResult> result) where TResult : IDbResult
     {
