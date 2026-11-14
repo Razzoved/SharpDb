@@ -55,7 +55,7 @@ public abstract class Entity
     /// <param name="propertyName">Name of the property (if called in set method)</param>
     protected void SetProperty<T>(ref T property, T value, [CallerMemberName] string propertyName = "")
     {
-        if (EqualityComparer<T>.Default.Equals(property, value))
+        if (!EqualityComparer<T>.Default.Equals(property, value))
         {
             PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
             property = value;
