@@ -62,6 +62,24 @@ public abstract class Entity
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         };
     }
+
+    /// <summary>
+    /// Updates the field and raises PropertyChanging and PropertyChanged events if the value has changed.
+    /// </summary>
+    /// <typeparam name="T">Property type</typeparam>
+    /// <param name="property">Reference to the property</param>
+    /// <param name="value">Value to be set</param>
+    /// <param name="equalityComparer">Comparer that decides whether the value needs to be updated</param>
+    /// <param name="propertyName">Name of the property (if called in set method)</param>
+    protected void SetProperty<T>(ref T property, T value, IEqualityComparer<T> equalityComparer, [CallerMemberName] string propertyName = "")
+    {
+        if (!equalityComparer.Equals(property, value))
+        {
+            PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
+            property = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        };
+    }
 }
 
 /// <summary>
