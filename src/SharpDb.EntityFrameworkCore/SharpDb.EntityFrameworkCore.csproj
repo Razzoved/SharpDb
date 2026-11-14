@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>8.4.2</Version>
+    <Version>8.4.3</Version>
     <Description>Library providing utilities/extensions for Microsoft.EntityFrameworkCore</Description>
     <Authors>Jan Martinek</Authors>
     <Keyword>sharpdb lib database data efc</Keyword>
@@ -20,6 +20,8 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReleaseNotes>
+      [8.4.3] - 2026-11-14
+      - Fixed Entity.SetProperty(...) equality comparison
       [8.4.1] - 2026-08-02
       - Interceptor fixes
       [8.4.0] - 2026-07-31
