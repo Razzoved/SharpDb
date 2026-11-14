@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>9.0.1</Version>
+    <Version>9.0.2</Version>
     <Description>Library providing cryptographical utilities for DB projects</Description>
     <Authors>Jan Martinek</Authors>
     <Keyword>sharpdb lib database data private cryptography</Keyword>
